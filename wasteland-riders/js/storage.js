@@ -25,13 +25,15 @@ function cacheTop5(top5) {
 export async function fetchTop5() {
   try {
     const res = await fetch(DB_URL + '/scores.json?orderBy=' + encodeURIComponent('"score"') + '&limitToLast=5');
-    if (!res.ok) throw new Error('bad response');
-    const obj = await res.json();
+    const body = await res.text();
+    if (!res.ok) { console.error('[leaderboard] fetch failed', res.status, body); return loadCachedTop5(); }
+    const obj = body ? JSON.parse(body) : null;
     const list = obj ? Object.values(obj) : [];
     list.sort((a, b) => b.score - a.score);
     cacheTop5(list);
     return list;
   } catch (e) {
+    console.error('[leaderboard] fetch error', e);
     return loadCachedTop5();
   }
 }
@@ -40,12 +42,16 @@ export async function fetchTop5() {
 // anyway), then returns the refreshed global top 5.
 export async function submitScore(name, score) {
   try {
-    await fetch(DB_URL + '/scores.json', {
+    const res = await fetch(DB_URL + '/scores.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, score, ts: Date.now() }),
     });
-  } catch (e) { /* offline — the score just won't show up on other devices */ }
+    const body = await res.text();
+    if (!res.ok) console.error('[leaderboard] submit rejected', res.status, body);
+  } catch (e) {
+    console.error('[leaderboard] submit error (offline?)', e);
+  }
   return fetchTop5();
 }
 
