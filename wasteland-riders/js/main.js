@@ -1,5 +1,7 @@
 import { Game } from './game.js';
+import { initTweaksPanel } from './tweaks.js';
 
 window.addEventListener('DOMContentLoaded', () => {
-  new Game(document.getElementById('game-root'));
+  const game = new Game(document.getElementById('game-root'));
+  initTweaksPanel(game);
 });

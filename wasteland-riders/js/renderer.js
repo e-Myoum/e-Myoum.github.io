@@ -37,23 +37,25 @@ export class Renderer {
     ctx.restore();
   }
 
+  // painted desert backdrop, tiled horizontally with a slow parallax drift
+  // (far slower than the dune layers) so it scrolls but never runs out.
+  // Alternate tiles are mirrored (a standard trick for a non-seamless source
+  // image) so consecutive copies always share their edge pixels — no hard seam.
   sky(ctx, W, H, cam) {
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#241009'); grad.addColorStop(0.4, '#6e2f18'); grad.addColorStop(0.66, '#b7671f'); grad.addColorStop(0.82, '#e2a044'); grad.addColorStop(1, '#efc069');
-    ctx.fillStyle = grad; ctx.fillRect(-40, -40, W + 80, H + 80);
-    // sun
-    const sx = W * 0.60 - cam.x * 0.02 % 1, sy = H * 0.58;
-    const sg = ctx.createRadialGradient(sx, sy, 10, sx, sy, 180);
-    sg.addColorStop(0, 'rgba(255,224,150,0.95)'); sg.addColorStop(0.5, 'rgba(255,180,90,0.5)'); sg.addColorStop(1, 'rgba(255,150,70,0)');
-    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 180, 0, 7); ctx.fill();
-    ctx.fillStyle = '#ffd97a'; ctx.beginPath(); ctx.arc(sx, sy, 86, 0, 7); ctx.fill();
-    // akira retro sun bands
-    ctx.fillStyle = '#b7671f';
-    for (let i = 0; i < 5; i++) { const yy = sy + 18 + i * 13; ctx.fillRect(sx - 90, yy, 180, 4 + i * 1.4); }
-    // haze
-    ctx.globalAlpha = 0.12; ctx.fillStyle = '#ffe0a0';
-    for (let i = 0; i < 4; i++) ctx.fillRect(0, H * 0.5 + i * 16, W, 3);
-    ctx.globalAlpha = 1;
+    const img = this.spr.bgDesert;
+    if (!img) { ctx.fillStyle = '#241009'; ctx.fillRect(-40, -40, W + 80, H + 80); return; }
+    const scale = H / img.height;
+    const dw = img.width * scale;
+    const absOff = cam.x * 0.05;
+    const i0 = Math.floor((absOff - dw) / dw);
+    const i1 = Math.floor((absOff + W) / dw) + 1;
+    for (let i = i0; i <= i1; i++) {
+      const screenX = i * dw - absOff;
+      ctx.save();
+      if (i & 1) { ctx.translate(screenX + dw, 0); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, dw, H); }
+      else { ctx.drawImage(img, screenX, 0, dw, H); }
+      ctx.restore();
+    }
   }
 
   dunes(ctx, W, H, cam, fac, baseY, amp, color, freq) {
@@ -167,10 +169,12 @@ export class Renderer {
   drawWheels(ctx) {
     const rw = this.spr.wheelR, fw = this.spr.wheelF; if (!rw || !fw) return;
     const g = this.game, c = g.cfg, b = g.bike, imgs = [rw, fw];
-    // wheel display diameter derived from the PHYSICS radius (so visuals match the collisions)
-    const D = 2 * c.wheelR * (g.props.tailleRoues ?? 1.02);
+    // wheel display diameter derived from the PHYSICS radius (so visuals match the collisions);
+    // rear/front sized independently in case the two sprites' art doesn't share the same scale
+    const tailles = [g.props.tailleRoueAr ?? 1.02, g.props.tailleRoueAv ?? 1.02];
     for (let wi = 0; wi < 2; wi++) {
       const o = c.wheels[wi], im = imgs[wi];
+      const D = 2 * c.wheelR * tailles[wi];
       const Wd = D, Hd = D * im.height / im.width;
       ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(b.spin);
       ctx.drawImage(im, -Wd / 2, -Hd / 2, Wd, Hd);
@@ -185,7 +189,7 @@ export class Renderer {
     // anchor = the rider's seat point in the pilot sprite (px), placed on the bike's saddle
     const ax = 30, ay = feminin ? 142.5 : 140;
     const px = (g.props.piloteX ?? -17), py = (g.props.piloteY ?? -6);
-    ctx.save(); ctx.translate(px, py); ctx.rotate(-0.045);
+    ctx.save(); ctx.translate(px, py); ctx.rotate(g.props.piloteRot ?? -0.045);
     ctx.drawImage(p, -ax * s, -ay * s, p.width * s, p.height * s);
     ctx.restore();
   }
