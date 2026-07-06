@@ -1,26 +1,52 @@
-// localStorage persistence for the arcade leaderboard and character choice.
-// Isolated here so the rest of the app never touches localStorage directly.
-const KEY_TOP5 = 'mm_top5';
-const KEY_BEST = 'mm_best';
+// Global arcade leaderboard, backed by a public Firebase Realtime Database —
+// plain REST calls (no SDK needed). Anyone can append a valid score entry;
+// the DB rules forbid editing or deleting existing ones, so the "top 5" is
+// just whatever the server-side query returns, never something we curate
+// and overwrite from the client. A localStorage cache keeps the last-seen
+// list around so the start screen has something to paint before the network
+// round-trip resolves (or if it's offline).
+const DB_URL = 'https://wasteland-riders-default-rtdb.europe-west1.firebasedatabase.app';
+const KEY_TOP5_CACHE = 'mm_top5_cache';
 const KEY_PERSO = 'mm_perso';
 
-export function loadTop5() {
+export function loadCachedTop5() {
   let list = [];
-  try { list = JSON.parse(localStorage.getItem(KEY_TOP5) || '[]'); } catch (e) { list = []; }
+  try { list = JSON.parse(localStorage.getItem(KEY_TOP5_CACHE) || '[]'); } catch (e) { list = []; }
   if (!Array.isArray(list)) list = [];
   return list.filter(e => e && typeof e.score === 'number').slice(0, 5);
 }
 
-export function loadBest(top5) {
-  if (top5.length) return top5[0].score;
-  return parseInt(localStorage.getItem(KEY_BEST) || '0', 10) || 0;
+function cacheTop5(top5) {
+  try { localStorage.setItem(KEY_TOP5_CACHE, JSON.stringify(top5)); } catch (e) { /* storage unavailable — non-fatal */ }
 }
 
-export function saveTop5(top5) {
+// Pulls the 5 highest scores across everyone who's played. Falls back to the
+// local cache (last successful fetch) if the network/DB is unreachable.
+export async function fetchTop5() {
   try {
-    localStorage.setItem(KEY_TOP5, JSON.stringify(top5));
-    localStorage.setItem(KEY_BEST, String(top5[0] ? top5[0].score : 0));
-  } catch (e) { /* storage unavailable (private mode, quota, ...) — non-fatal */ }
+    const res = await fetch(DB_URL + '/scores.json?orderBy=' + encodeURIComponent('"score"') + '&limitToLast=5');
+    if (!res.ok) throw new Error('bad response');
+    const obj = await res.json();
+    const list = obj ? Object.values(obj) : [];
+    list.sort((a, b) => b.score - a.score);
+    cacheTop5(list);
+    return list;
+  } catch (e) {
+    return loadCachedTop5();
+  }
+}
+
+// Appends a new score (never edits/deletes — the DB rules wouldn't allow it
+// anyway), then returns the refreshed global top 5.
+export async function submitScore(name, score) {
+  try {
+    await fetch(DB_URL + '/scores.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, score, ts: Date.now() }),
+    });
+  } catch (e) { /* offline — the score just won't show up on other devices */ }
+  return fetchTop5();
 }
 
 export function loadPerso() {

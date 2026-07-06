@@ -1,5 +1,5 @@
 import { TWEAKS, CHASSIS_AXLE, makeLevelConfig } from './config.js';
-import { loadTop5, loadBest, saveTop5, loadPerso, savePerso } from './storage.js';
+import { loadCachedTop5, fetchTop5, submitScore, loadPerso, savePerso } from './storage.js';
 import { Terrain } from './terrain.js';
 import { Renderer } from './renderer.js';
 import { InputController } from './input.js';
@@ -30,14 +30,20 @@ export class Game {
     this.particles = [];
     this.tw = [];
 
-    const top5 = loadTop5();
-    this.top5 = top5;
-    this.best = loadBest(top5);
+    // paint instantly from the last-seen cache, then refresh from the global leaderboard
+    const cached = loadCachedTop5();
+    this.top5 = cached;
+    this.best = cached[0] ? cached[0].score : 0;
     this.lives = 3;
     this.banked = 0;
 
     this.renderer.loadSprites();
     this.setState({ best: this.best, top5: this.top5.slice(), persoSel: loadPerso() });
+    fetchTop5().then(top5 => {
+      this.top5 = top5;
+      this.best = top5[0] ? top5[0].score : this.best;
+      this.setState({ best: this.best, top5: this.top5.slice() });
+    });
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -141,16 +147,15 @@ export class Game {
     this.setState({ screen: 'complete', kt: this.runTime.toFixed(1) + 's', kb: '+' + bonus, ks: levelScore, banked: this.banked });
   }
 
-  saveScore() {
+  async saveScore() {
     if (!(this.state.qualifies && !this.state.saved)) return;
     let name = (this.ui.pseudoValue() || 'AAA').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
     if (!name) name = 'AAA';
-    this.top5.push({ name, score: this.pendingScore });
-    this.top5.sort((a, b) => b.score - a.score);
-    this.top5 = this.top5.slice(0, 5);
-    this.best = this.top5[0].score;
-    saveTop5(this.top5);
-    this.setState({ saved: true, top5: this.top5.slice(), best: this.best });
+    this.setState({ saved: true });  // optimistic — blocks a double-submit while the request is in flight
+    const top5 = await submitScore(name, this.pendingScore);
+    this.top5 = top5;
+    this.best = top5[0] ? top5[0].score : this.best;
+    this.setState({ top5: this.top5.slice(), best: this.best });
   }
 
   perso() { return this.state.persoSel || this.props.perso || 'masculin'; }
