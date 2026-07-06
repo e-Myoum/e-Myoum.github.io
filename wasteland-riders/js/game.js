@@ -339,7 +339,7 @@ export class Game {
       if (this.twTimer <= 0 && this.tw.length < 3) { this.twTimer = 2.6 + Math.random() * 3.2; const sx = b.x + (this.VW || this.W) * 0.8; this.tw.push({ x: sx, vx: -26 - Math.random() * 40, phase: Math.random() * 6.28, rot: Math.random() * 6.28 }); }
     }
     for (let i = this.tw.length - 1; i >= 0; i--) {
-      const t = this.tw[i]; t.x += t.vx * dt; t.phase += dt * 3.2; t.rot += (t.vx / 46) * dt;
+      const t = this.tw[i]; t.x += t.vx * dt; t.phase += dt * 3.2; t.rot += (t.vx / 23) * dt;
       if (t.x < b.x - (this.VW || this.W) * 0.75) this.tw.splice(i, 1);
     }
     for (let i = this.particles.length - 1; i >= 0; i--) {

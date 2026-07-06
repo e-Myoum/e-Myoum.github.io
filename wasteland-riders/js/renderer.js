@@ -108,8 +108,8 @@ export class Renderer {
     // roaming tumbleweeds — rolling like a ball, with a periodic little hop
     for (const t of g.tw) {
       if (t.x < cam.x - 140 || t.x > cam.x + W + 140) continue;
-      const bounce = 12 * Math.abs(Math.sin(t.phase));
-      this.rollingSprite(ctx, cam, t.x, g.groundY(t.x), this.spr.tumbleweed, 92, t.rot, bounce);
+      const bounce = 6 * Math.abs(Math.sin(t.phase));
+      this.rollingSprite(ctx, cam, t.x, g.groundY(t.x), this.spr.tumbleweed, 46, t.rot, bounce);
     }
   }
 

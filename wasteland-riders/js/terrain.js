@@ -52,16 +52,21 @@ export class Terrain {
         fx += 400 + rng2() * 460;  // breather gap
       }
     }
-    // decor: sparse and coherent — obstacles kept off the jumps, crows perch near scarecrows
+    // decor: sparse and coherent — obstacles kept off the jumps, crows perch near cacti.
+    // Type is picked first from the full weighted spread; a spot too close to a jump/whoops
+    // just drops its obstacle roll (no decor there) instead of falling through to the next
+    // type, so being near a feature doesn't inflate the other decor's odds.
     const rng = this.mulberry(Math.floor(this.seed * 7.3));
-    const nearFeature = (x) => this.features.some(f => f.type === 'jump' ? Math.abs(x - f.x) < f.w * 2.2 : (x > f.x - 140 && x < f.x + f.len + 140));
+    const nearFeature = (x) => this.features.some(f => f.type === 'jump' ? Math.abs(x - f.x) < f.w : (x > f.x - 60 && x < f.x + f.len + 60));
     let x = 900;
     while (x < this.finishX - 500) {
       const r = rng();
-      if (r < 0.42 && !nearFeature(x)) {
+      if (r < 0.44) {
         // obstacle on open ground: mostly rocks, occasionally a wreck
-        if (rng() < 0.62) { const h = 22 + rng() * 22, w = h * 2.4 + 52; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'rock', variant: (rng() * 4) | 0, h, w }); }
-        else { const h = 38 + rng() * 26, w = h * 2.6 + 74; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'wreck', variant: (rng() * 4) | 0, h, w }); }
+        if (!nearFeature(x)) {
+          if (rng() < 0.65) { const h = 22 + rng() * 22, w = h * 2.4 + 52; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'rock', variant: (rng() * 4) | 0, h, w }); }
+          else { const h = 38 + rng() * 26, w = h * 2.6 + 74; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'wreck', variant: (rng() * 4) | 0, h, w }); }
+        }
       } else if (r < 0.58) {
         // landmark: cactus, often with a crow perched close by
         this.decor.push({ x, type: 'cactus', variant: (rng() * 5) | 0 });
