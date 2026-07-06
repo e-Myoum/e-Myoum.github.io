@@ -172,10 +172,11 @@ export class Renderer {
   }
   drawPiloteSprite(ctx) {
     const g = this.game;
-    const p = (g.perso() === 'feminin' ? this.spr.joeF : this.spr.joeM); if (!p) return;
+    const feminin = g.perso() === 'feminin';
+    const p = (feminin ? this.spr.joeF : this.spr.joeM); if (!p) return;
     const s = this.bikeScale() * (g.props.taillePilote ?? 1.16);
     // anchor = the rider's seat point in the pilot sprite (px), placed on the bike's saddle
-    const ax = 90, ay = 150;
+    const ax = 30, ay = feminin ? 142.5 : 140;
     const px = (g.props.piloteX ?? -17), py = (g.props.piloteY ?? -6);
     ctx.save(); ctx.translate(px, py); ctx.rotate(-0.045);
     ctx.drawImage(p, -ax * s, -ay * s, p.width * s, p.height * s);
