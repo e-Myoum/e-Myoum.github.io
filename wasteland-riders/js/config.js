@@ -1,18 +1,20 @@
-// Fixed feel/tuning values. In the original design mockup these were sliders in an
-// outer "Tweaks" panel used only while designing; the shipped game has no such panel,
-// so they're pinned to the values the designer landed on after playtesting.
+// Feel/tuning values, editable live via the Tweaks panel (see tweaks.js) while
+// designing sprite fit. These are just the panel's starting point/defaults —
+// drag the sliders in-game, then hardcode the numbers you land on back here.
 export const TWEAKS = {
   difficulty: 'normal',
   decollage: 1.1,      // takeoff ease (crest launch-assist multiplier)
   flottement: 1.4,     // air floatiness (inverse of in-air gravity)
-  tailleRoues: 1.02,
+  tailleRoueAv: 1.02,
+  tailleRoueAr: 1.02,
   taillePilote: 1.16,
   piloteX: -17,
   piloteY: -6,
-  axeArX: 18,
-  axeArY: 173,
-  axeAvX: 361,
-  axeAvY: 164,
+  piloteRot: -0.045,
+  axeArX: 49,
+  axeArY: 229,
+  axeAvX: 399,
+  axeAvY: 180,
   grain: true,
   showSlots: false,
   screenShake: true,
@@ -35,6 +37,7 @@ export function makeLevelConfig(level) {
 
 // Sprite manifest: instance key -> file name under assets/.
 export const SPRITE_MANIFEST = {
+  bgDesert: 'f_bg_desert.jpg',
   moto: 'f_moto.png', wheelR: 'f_wheelRear.png', wheelF: 'f_wheelFront.png',
   joeM: 'f_pilotM_sit.png', joeF: 'f_pilotF_sit.png',
   downM: 'f_pilotM_down.png', downF: 'f_pilotF_down.png',
