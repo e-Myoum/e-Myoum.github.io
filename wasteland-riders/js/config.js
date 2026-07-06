@@ -1,20 +1,18 @@
-// Feel/tuning values, editable live via the Tweaks panel (see tweaks.js) while
-// designing sprite fit. These are just the panel's starting point/defaults —
-// drag the sliders in-game, then hardcode the numbers you land on back here.
+// Fixed feel/tuning values, landed on after eyeballing sprite fit in-game.
 export const TWEAKS = {
   difficulty: 'normal',
   decollage: 1.1,      // takeoff ease (crest launch-assist multiplier)
   flottement: 1.4,     // air floatiness (inverse of in-air gravity)
-  tailleRoueAv: 1.02,
-  tailleRoueAr: 1.02,
-  taillePilote: 1.16,
-  piloteX: -17,
-  piloteY: -6,
-  piloteRot: -0.045,
-  axeArX: 49,
-  axeArY: 229,
-  axeAvX: 399,
-  axeAvY: 180,
+  tailleRoueAv: 1.1,
+  tailleRoueAr: 1.1,
+  taillePilote: 1.38,
+  piloteX: -23,
+  piloteY: -25,
+  piloteRot: 0.475,
+  axeArX: 47,
+  axeArY: 227,
+  axeAvX: 427,
+  axeAvY: 193,
   grain: true,
   showSlots: false,
   screenShake: true,
@@ -53,4 +51,4 @@ export const SPRITE_MANIFEST = {
 export const CACTUS_H = [57, 54, 54, 140, 113];
 
 // Chassis axle anchors, in chassis-sprite pixel space (overridable via TWEAKS.axe*).
-export const CHASSIS_AXLE = { rear: { x: 49, y: 229 }, front: { x: 399, y: 180 } };
+export const CHASSIS_AXLE = { rear: { x: 47, y: 227 }, front: { x: 427, y: 193 } };
