@@ -1,7 +1,7 @@
 // Procedural, seeded level terrain: a rolling dune base plus two hand-designed
 // feature types layered on top — "jump" (a tall gaussian kicker to launch off)
 // and "whoops" (a run of small sharp bumps that punish full throttle) — with
-// scattered decor (rocks/wrecks/scarecrows/crows) kept clear of the features.
+// scattered decor (rocks/wrecks/cacti/crows) kept clear of the features.
 // The same seed always regenerates the exact same level.
 export class Terrain {
   constructor(seed, cfg, diffMul, finishX) {
@@ -63,9 +63,9 @@ export class Terrain {
         if (rng() < 0.62) { const h = 22 + rng() * 22, w = h * 2.4 + 52; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'rock', variant: (rng() * 4) | 0, h, w }); }
         else { const h = 38 + rng() * 26, w = h * 2.6 + 74; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'wreck', variant: (rng() * 4) | 0, h, w }); }
       } else if (r < 0.58) {
-        // landmark: scarecrow, often with a crow perched close by
-        this.decor.push({ x, type: 'scarecrow' });
-        if (rng() < 0.55) this.decor.push({ x: x + 40 + rng() * 50, type: 'crow', crow: { flew: false, x: 0, y: 0, vx: 0, vy: 0, fl: rng() * 6.28, t: 0 } });
+        // landmark: cactus, often with a crow perched close by
+        this.decor.push({ x, type: 'cactus', variant: (rng() * 5) | 0 });
+        if (rng() < 0.55) this.decor.push({ x: x + 40 + rng() * 50, type: 'crow', variant: (rng() * 2) | 0, crow: { flew: false, x: 0, y: 0, vx: 0, vy: 0, fl: rng() * 6.28, t: 0 } });
       }
       // else: empty desert stretch
       x += 520 + rng() * 420;

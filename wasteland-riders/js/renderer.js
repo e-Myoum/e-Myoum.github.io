@@ -1,4 +1,4 @@
-import { SPRITE_MANIFEST } from './config.js';
+import { SPRITE_MANIFEST, CACTUS_H } from './config.js';
 
 // All canvas 2D drawing: parallax sky/dunes, ground silhouette, decor sprites,
 // bike (sprite-based, with a vector fallback if a sprite fails to load),
@@ -95,21 +95,28 @@ export class Renderer {
       const groundRot = Math.atan(g.slope(d.x));
       if (d.type === 'rock') { this.groundSprite(ctx, cam, d.x, gy, this.spr['rock' + (d.variant + 1)], d.w * 1.15, groundRot); }
       else if (d.type === 'wreck') { this.groundSprite(ctx, cam, d.x, gy, this.spr['car' + (d.variant + 1)], d.w * 1.2, groundRot); }
-      else if (d.type === 'scarecrow') { this.groundSpriteH(ctx, cam, d.x, gy, this.spr.scarecrow, 138, 0); }
+      else if (d.type === 'cactus') { this.groundSpriteH(ctx, cam, d.x, gy, this.spr['cactus' + (d.variant + 1)], CACTUS_H[d.variant], 0); }
       else if (d.type === 'crow') {
         const cr = d.crow;
         if (cr.flew) { this.flySprite(ctx, cam, cr.x, cr.y, this.spr.crowFly, 66, Math.sin(cr.fl) * 0.14); }
-        else this.groundSpriteH(ctx, cam, d.x, gy, this.spr.crow, 44, 0);
+        else this.groundSpriteH(ctx, cam, d.x, gy, this.spr['crow' + (d.variant + 1)], 44, 0);
       }
       if (g.props.showSlots) { ctx.save(); this.worldT(ctx, cam, d.x, gy); this.slotTag(ctx, d.type); ctx.restore(); }
     }
-    // roaming little tornadoes
-    for (const t of g.tw) { if (t.x < cam.x - 140 || t.x > cam.x + W + 140) continue; this.groundSpriteH(ctx, cam, t.x, g.groundY(t.x), this.spr.tornado, 104, Math.sin(t.phase) * 0.05); }
+    // roaming tumbleweeds — rolling like a ball, with a periodic little hop
+    for (const t of g.tw) {
+      if (t.x < cam.x - 140 || t.x > cam.x + W + 140) continue;
+      const bounce = 12 * Math.abs(Math.sin(t.phase));
+      this.rollingSprite(ctx, cam, t.x, g.groundY(t.x), this.spr.tumbleweed, 92, t.rot, bounce);
+    }
   }
 
   groundSprite(ctx, cam, wx, gy, img, Wd, rot) { if (!img) return; const Hd = Wd * img.height / img.width; ctx.save(); this.worldT(ctx, cam, wx, gy); if (rot) ctx.rotate(rot); ctx.drawImage(img, -Wd / 2, -Hd * 0.88, Wd, Hd); ctx.restore(); }
   groundSpriteH(ctx, cam, wx, gy, img, Hd, rot) { if (!img) return; const Wd = Hd * img.width / img.height; ctx.save(); this.worldT(ctx, cam, wx, gy); if (rot) ctx.rotate(rot); ctx.drawImage(img, -Wd / 2, -Hd + 2, Wd, Hd); ctx.restore(); }
   flySprite(ctx, cam, wx, wy, img, Wd, rot) { if (!img) return; const Hd = Wd * img.height / img.width; ctx.save(); this.worldT(ctx, cam, wx, wy); if (rot) ctx.rotate(rot); ctx.drawImage(img, -Wd / 2, -Hd / 2, Wd, Hd); ctx.restore(); }
+  // ball-like rolling object: rotates about its own center (not its ground contact
+  // point, unlike groundSpriteH) and can be lifted by `bounce` for a little hop.
+  rollingSprite(ctx, cam, wx, gy, img, Hd, rot, bounce) { if (!img) return; const Wd = Hd * img.width / img.height; ctx.save(); this.worldT(ctx, cam, wx, gy - Hd / 2 - bounce); ctx.rotate(rot); ctx.drawImage(img, -Wd / 2, -Hd / 2, Wd, Hd); ctx.restore(); }
 
   slotTag(ctx, label) {
     ctx.save(); ctx.fillStyle = 'rgba(255,210,140,0.85)'; ctx.font = "10px 'Space Mono', monospace";

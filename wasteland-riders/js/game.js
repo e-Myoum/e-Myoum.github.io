@@ -323,7 +323,7 @@ export class Game {
   updateWorld(dt) {
     const b = this.bike;
     for (const d of this.decor) {
-      // scarecrow is fully static (no motion)
+      // cactus is fully static (no motion)
       if (d.type === 'crow' && d.crow) {
         const cr = d.crow;
         if (!cr.flew && b.x > d.x - 300 && b.x < d.x + 130 && Math.abs(b.vx) > 40) {
@@ -333,13 +333,13 @@ export class Game {
         if (cr.flew) { cr.t += dt; cr.vy += 46 * dt; cr.x += cr.vx * dt; cr.y += cr.vy * dt; cr.fl += dt * 13; }
       }
     }
-    // roaming little tornadoes
+    // roaming tumbleweeds — rolling (continuous spin) + a little hop on every bounce
     if (this.state.screen === 'playing') {
       this.twTimer -= dt;
-      if (this.twTimer <= 0 && this.tw.length < 3) { this.twTimer = 2.6 + Math.random() * 3.2; const sx = b.x + (this.VW || this.W) * 0.8; this.tw.push({ x: sx, vx: -26 - Math.random() * 40, phase: Math.random() * 6.28 }); }
+      if (this.twTimer <= 0 && this.tw.length < 3) { this.twTimer = 2.6 + Math.random() * 3.2; const sx = b.x + (this.VW || this.W) * 0.8; this.tw.push({ x: sx, vx: -26 - Math.random() * 40, phase: Math.random() * 6.28, rot: Math.random() * 6.28 }); }
     }
     for (let i = this.tw.length - 1; i >= 0; i--) {
-      const t = this.tw[i]; t.x += t.vx * dt; t.phase += dt * 3.2;
+      const t = this.tw[i]; t.x += t.vx * dt; t.phase += dt * 3.2; t.rot += (t.vx / 46) * dt;
       if (t.x < b.x - (this.VW || this.W) * 0.75) this.tw.splice(i, 1);
     }
     for (let i = this.particles.length - 1; i >= 0; i--) {
