@@ -22,16 +22,21 @@ function cacheTop5(top5) {
 
 // Pulls the 5 highest scores across everyone who's played. Falls back to the
 // local cache (last successful fetch) if the network/DB is unreachable.
+// Fetches every entry and sorts client-side rather than asking the DB to
+// order/limit server-side — that needs a ".indexOn" rule for the "score"
+// field or Firebase rejects the query outright, and this leaderboard will
+// never hold enough rows for downloading all of them to matter.
 export async function fetchTop5() {
   try {
-    const res = await fetch(DB_URL + '/scores.json?orderBy=' + encodeURIComponent('"score"') + '&limitToLast=5');
+    const res = await fetch(DB_URL + '/scores.json');
     const body = await res.text();
     if (!res.ok) { console.error('[leaderboard] fetch failed', res.status, body); return loadCachedTop5(); }
     const obj = body ? JSON.parse(body) : null;
     const list = obj ? Object.values(obj) : [];
     list.sort((a, b) => b.score - a.score);
-    cacheTop5(list);
-    return list;
+    const top5 = list.slice(0, 5);
+    cacheTop5(top5);
+    return top5;
   } catch (e) {
     console.error('[leaderboard] fetch error', e);
     return loadCachedTop5();
