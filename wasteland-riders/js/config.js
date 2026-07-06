@@ -38,10 +38,16 @@ export const SPRITE_MANIFEST = {
   moto: 'f_moto.png', wheelR: 'f_wheelRear.png', wheelF: 'f_wheelFront.png',
   joeM: 'f_pilotM_sit.png', joeF: 'f_pilotF_sit.png',
   downM: 'f_pilotM_down.png', downF: 'f_pilotF_down.png',
-  scarecrow: 'f_scarecrow.png', crow: 'f_crow_static.png', crowFly: 'f_crow_fly.png', tornado: 'f_tornado.png',
+  crow1: 'f_crow1.png', crow2: 'f_crow2.png', crowFly: 'f_crow_fly.png', tumbleweed: 'f_tumbleweed.png',
   rock1: 'f_rock1.png', rock2: 'f_rock2.png', rock3: 'f_rock3.png', rock4: 'f_rock4.png',
   car1: 'f_car1.png', car2: 'f_car2.png', car3: 'f_car3.png', car4: 'f_car4.png',
+  cactus1: 'f_cactus1.png', cactus2: 'f_cactus2.png', cactus3: 'f_cactus3.png', cactus4: 'f_cactus4.png', cactus5: 'f_cactus5.png',
 };
 
+// Display height (world px) per cactus variant — kept proportional to each
+// source sprite's natural aspect so the tall saguaro reads taller than the
+// squat barrel cacti instead of all landmarks sharing one fixed height.
+export const CACTUS_H = [57, 54, 54, 140, 113];
+
 // Chassis axle anchors, in chassis-sprite pixel space (overridable via TWEAKS.axe*).
-export const CHASSIS_AXLE = { rear: { x: 18, y: 173 }, front: { x: 361, y: 164 } };
+export const CHASSIS_AXLE = { rear: { x: 49, y: 229 }, front: { x: 399, y: 180 } };
