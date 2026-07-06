@@ -52,28 +52,41 @@ export class Terrain {
         fx += 400 + rng2() * 460;  // breather gap
       }
     }
-    // decor: sparse and coherent — obstacles kept off the jumps, crows perch near cacti.
-    // Type is picked first from the full weighted spread; a spot too close to a jump/whoops
-    // just drops its obstacle roll (no decor there) instead of falling through to the next
-    // type, so being near a feature doesn't inflate the other decor's odds.
+    // decor: obstacles kept off the jumps, crows perch near cacti. Type is picked
+    // first from the full weighted spread; a spot too close to a jump/whoops just
+    // drops its obstacle roll (no decor there) instead of falling through to the
+    // next type, so being near a feature doesn't inflate the other decor's odds.
+    // Roll points come often (dense enough that levels don't feel empty), but a
+    // hard minimum gap since the last placed decor keeps things from clumping —
+    // density and "not too crowded" are two separate knobs this way.
     const rng = this.mulberry(Math.floor(this.seed * 7.3));
     const nearFeature = (x) => this.features.some(f => f.type === 'jump' ? Math.abs(x - f.x) < f.w : (x > f.x - 60 && x < f.x + f.len + 60));
+    const MIN_GAP = 320;
+    let lastDecorX = -Infinity;
     let x = 900;
     while (x < this.finishX - 500) {
       const r = rng();
-      if (r < 0.44) {
-        // obstacle on open ground: mostly rocks, occasionally a wreck
-        if (!nearFeature(x)) {
-          if (rng() < 0.65) { const h = 22 + rng() * 22, w = h * 2.4 + 52; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'rock', variant: (rng() * 4) | 0, h, w }); }
-          else { const h = 38 + rng() * 26, w = h * 2.6 + 74; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'wreck', variant: (rng() * 4) | 0, h, w }); }
+      if (x - lastDecorX >= MIN_GAP) {
+        if (r < 0.44) {
+          // obstacle on open ground: mostly rocks, occasionally a wreck
+          if (!nearFeature(x)) {
+            if (rng() < 0.65) { const h = 22 + rng() * 22, w = h * 2.4 + 52; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'rock', variant: (rng() * 4) | 0, h, w }); }
+            else { const h = 38 + rng() * 26, w = h * 2.6 + 74; this.hazards.push({ x, w, h }); this.decor.push({ x, type: 'wreck', variant: (rng() * 4) | 0, h, w }); }
+            lastDecorX = x;
+          }
+        } else if (r < 0.58) {
+          // landmark: cactus, often with a crow perched close by
+          this.decor.push({ x, type: 'cactus', variant: (rng() * 5) | 0 });
+          lastDecorX = x;
+          if (rng() < 0.55) {
+            const crowX = x + 40 + rng() * 50;
+            this.decor.push({ x: crowX, type: 'crow', variant: (rng() * 2) | 0, crow: { flew: false, x: 0, y: 0, vx: 0, vy: 0, fl: rng() * 6.28, t: 0 } });
+            lastDecorX = crowX;
+          }
         }
-      } else if (r < 0.58) {
-        // landmark: cactus, often with a crow perched close by
-        this.decor.push({ x, type: 'cactus', variant: (rng() * 5) | 0 });
-        if (rng() < 0.55) this.decor.push({ x: x + 40 + rng() * 50, type: 'crow', variant: (rng() * 2) | 0, crow: { flew: false, x: 0, y: 0, vx: 0, vy: 0, fl: rng() * 6.28, t: 0 } });
       }
-      // else: empty desert stretch
-      x += 520 + rng() * 420;
+      // else: too close to the last decor, or an empty-stretch roll
+      x += 220 + rng() * 180;
     }
   }
 
