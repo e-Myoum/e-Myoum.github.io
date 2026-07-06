@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>WASTELAND RIDERS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="game-root" oncontextmenu="return false;">
+
+  <canvas id="game-canvas"></canvas>
+
+  <!-- grain / scanline / vignette -->
+  <div id="fx-grain" class="fx-grain"></div>
+  <div class="fx-scanlines"></div>
+  <div class="fx-vignette"></div>
+
+  <!-- HUD -->
+  <div id="hud-wrap" data-hud="wrap" class="hud-wrap">
+    <div class="hud-topleft">
+      <div class="hud-label">SCORE</div>
+      <div data-hud="score" class="hud-score">0</div>
+      <div data-hud="lives" class="hud-lives">▲▲▲</div>
+      <div data-hud="combo" class="hud-combo">COMBO ×1</div>
+    </div>
+    <div class="hud-topright">
+      <div class="hud-speedrow">
+        <div data-hud="speed" class="hud-speed">0</div>
+        <div class="hud-unit">KM/H</div>
+      </div>
+      <div class="hud-distrow">
+        <span data-hud="dist">0 M</span>
+        <span class="hud-sep">/</span>
+        <span data-hud="lvl">砂漠 01</span>
+      </div>
+      <div class="hud-prog">
+        <div data-hud="progfill" class="hud-progfill"></div>
+      </div>
+    </div>
+    <button id="btn-pause" class="btn-pause">❚❚ PAUSE</button>
+    <div data-hud="trick" class="hud-trick"></div>
+  </div>
+
+  <!-- on-screen controls -->
+  <div id="hud-pads" data-hud="pads" class="hud-pads">
+    <button id="btn-brake" data-ctl="brake" class="pad pad-brake"><span class="pad-arrow">◄</span>FREIN</button>
+    <button id="btn-gas" data-ctl="gas" class="pad pad-gas"><span class="pad-arrow">►</span>GAZ</button>
+  </div>
+
+  <!-- START overlay -->
+  <div id="screen-start" class="overlay overlay-start">
+    <a id="btn-home" href="../" class="btn-home">← ACCUEIL</a>
+    <div class="tagline">砂漠 ・ WASTELAND RIDERS</div>
+    <div id="game-title" class="game-title">JOE</div>
+    <div class="hr"></div>
+    <div class="controls-row">
+      <span><b class="c-orange">►</b> GAZ &nbsp;/&nbsp; nez en l'air</span>
+      <span><b class="c-amber">◄</b> FREIN &nbsp;/&nbsp; nez en avant</span>
+      <span class="dim">flips + wheelie = combo</span>
+      <span class="dim"><b class="c-amber">R</b> = reset partie</span>
+    </div>
+    <div class="perso-row">
+      <div class="perso-label">PILOTE</div>
+      <button id="btn-perso-m" class="perso-btn">JOE</button>
+      <button id="btn-perso-f" class="perso-btn">LOU</button>
+    </div>
+    <button id="btn-newgame" class="btn-primary btn-start-pulse">DÉMARRER</button>
+    <div class="arcade-note">MODE ARCADE ・ 3 VIES ▲▲▲</div>
+    <div id="top5-start" class="top5-wrap" hidden>
+      <div class="top5-title">TOP 5</div>
+      <div id="top5-start-list"></div>
+    </div>
+  </div>
+
+  <!-- PAUSE overlay -->
+  <div id="screen-pause" class="overlay overlay-pause" hidden>
+    <div class="tagline tagline-amber">一時停止</div>
+    <div class="big-title">PAUSE</div>
+    <div class="btn-row">
+      <button id="btn-resume" class="btn-green">REPRENDRE</button>
+      <button id="btn-menu-pause" class="btn-outline-amber">MENU</button>
+    </div>
+    <div class="hint">ÉCHAP / P</div>
+  </div>
+
+  <!-- CRASH overlay -->
+  <div id="screen-crashed" class="overlay overlay-crash" hidden>
+    <div class="tagline tagline-red blink">警告 ・ VIE PERDUE</div>
+    <div class="big-title title-crash">CRASH</div>
+    <div id="crash-lives" class="lives-str">▲▲△</div>
+    <div class="stat-row">
+      <div class="stat"><div id="crash-cs" class="stat-num strike">0</div><div class="stat-label">MANCHE PERDUE</div></div>
+      <div class="stat"><div id="crash-cf" class="stat-num">0</div><div class="stat-label">FIGURES</div></div>
+      <div class="stat"><div id="crash-banked" class="stat-num gold">0</div><div class="stat-label">TOTAL PARTIE</div></div>
+    </div>
+    <button id="btn-retry" class="btn-outline-amber">RÉESSAYER</button>
+  </div>
+
+  <!-- GAME OVER overlay -->
+  <div id="screen-gameover" class="overlay overlay-gameover" hidden>
+    <div class="tagline tagline-red blink">警告 ・ FIN DE PARTIE</div>
+    <div class="big-title title-crash">GAME OVER</div>
+    <div id="go-finalscore" class="final-score">0</div>
+    <div class="final-score-label">SCORE TOTAL ・ NIVEAUX RÉUSSIS</div>
+    <div id="entry-wrap" class="entry-wrap" hidden>
+      <div class="entry-note blink">NOUVEAU RECORD ・ VOS INITIALES</div>
+      <input id="pseudo-input" data-hud="pseudo" maxlength="3" placeholder="AAA" class="pseudo-input">
+      <button id="btn-savescore" class="btn-amber">VALIDER</button>
+    </div>
+    <div id="table-wrap" class="table-wrap" hidden>
+      <div id="top5-go" class="top5-wrap" hidden>
+        <div class="top5-title">TOP 5</div>
+        <div id="top5-go-list"></div>
+      </div>
+      <div class="btn-row">
+        <button id="btn-newgame-go" class="btn-primary">NOUVELLE PARTIE</button>
+        <button id="btn-menu-go" class="btn-outline-amber">MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL COMPLETE overlay -->
+  <div id="screen-complete" class="overlay overlay-complete" hidden>
+    <div class="tagline tagline-gold">突破 ・ SECTEUR FRANCHI</div>
+    <div class="big-title title-clear">CLEAR</div>
+    <div class="stat-row">
+      <div class="stat"><div id="complete-kt" class="stat-num">0.0s</div><div class="stat-label">TEMPS</div></div>
+      <div class="stat"><div id="complete-kb" class="stat-num green">+0</div><div class="stat-label">BONUS</div></div>
+      <div class="stat"><div id="complete-ks" class="stat-num">0</div><div class="stat-label">NIVEAU</div></div>
+      <div class="stat"><div id="complete-banked" class="stat-num gold">0</div><div class="stat-label">TOTAL PARTIE</div></div>
+    </div>
+    <button id="btn-next" class="btn-green">SECTEUR SUIVANT</button>
+  </div>
+
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
