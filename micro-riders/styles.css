@@ -1,0 +1,185 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: #eaf6ff; overflow: hidden; }
+
+@keyframes mrpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes mrpop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+
+#game-root {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  background: #eaf6ff; overflow: hidden;
+  font-family: 'Nunito', sans-serif;
+  user-select: none; -webkit-user-select: none;
+  touch-action: none; cursor: default;
+}
+
+#game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- HUD ---------- */
+.hud-wrap { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s; }
+.hud-topleft {
+  position: absolute; top: 18px; left: 18px; display: flex; flex-direction: column; gap: 2px;
+  background: rgba(255,255,255,0.82); border-radius: 16px; padding: 8px 18px; box-shadow: 0 4px 14px rgba(40,60,90,0.18);
+}
+.hud-position { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 30px; color: #e6402c; line-height: 1; }
+.hud-lap { font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .12em; color: #4a5568; text-transform: uppercase; }
+
+.hud-topright {
+  position: absolute; top: 18px; right: 18px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  background: rgba(255,255,255,0.82); border-radius: 16px; padding: 8px 18px; box-shadow: 0 4px 14px rgba(40,60,90,0.18);
+}
+.hud-time { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 22px; color: #2a9ee0; }
+.hud-speedrow { font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 13px; color: #4a5568; }
+.hud-unit { font-size: 11px; color: #8a97a8; margin-left: 3px; }
+
+.btn-pause {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+  pointer-events: auto; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  border: none; background: rgba(255,255,255,0.88); color: #2b2b33; border-radius: 50%;
+  width: 44px; height: 44px; font-size: 15px; box-shadow: 0 4px 14px rgba(40,60,90,0.2);
+}
+
+/* ---------- on-screen controls ---------- */
+.hud-pads {
+  position: absolute; bottom: 22px; left: 0; right: 0; display: flex; justify-content: space-between;
+  padding: 0 20px; pointer-events: none; opacity: 0; transition: opacity .25s;
+}
+.pad-cluster { display: flex; gap: 10px; pointer-events: auto; }
+.pad-cluster-right { flex-direction: column; }
+.pad {
+  pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none;
+  border: none; border-radius: 20px; cursor: pointer;
+  font-size: 26px; box-shadow: 0 4px 14px rgba(40,60,90,0.22);
+}
+.pad-steer { width: 78px; height: 78px; background: rgba(255,255,255,0.85); color: #2b2b33; }
+.pad-gas { width: 78px; height: 62px; background: #39c46b; color: #fff; }
+.pad-brake { width: 78px; height: 62px; background: #e6402c; color: #fff; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 20px; overflow: auto;
+}
+.overlay[hidden] { display: none; }
+
+.overlay-start { background: linear-gradient(180deg, rgba(234,246,255,0.92), rgba(210,236,252,0.96)); }
+.overlay-pause, .overlay-finished { background: linear-gradient(180deg, rgba(234,246,255,0.94), rgba(210,236,252,0.97)); }
+.overlay-countdown { background: transparent; pointer-events: none; }
+
+.btn-home {
+  position: absolute; top: 16px; left: 16px;
+  cursor: pointer; text-decoration: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  background: #ffffff; color: #4a5568; border-radius: 14px;
+  font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .06em; padding: 8px 14px;
+  box-shadow: 0 3px 10px rgba(40,60,90,0.15);
+}
+
+.tagline {
+  font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: .3em; color: #2a9ee0;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.game-title {
+  font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: min(15vw,80px); line-height: 0.95; color: #e6402c;
+  text-shadow: 3px 3px 0 #f5c518; margin-bottom: 18px;
+}
+
+.select-block { margin-bottom: 16px; }
+.select-label { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 11px; letter-spacing: .18em; color: #4a5568; margin-bottom: 8px; }
+
+.car-select { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.car-btn {
+  cursor: pointer; border: 3px solid transparent; background: #ffffff; border-radius: 16px; padding: 10px 18px;
+  display: flex; flex-direction: column; gap: 2px; box-shadow: 0 3px 10px rgba(40,60,90,0.15);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.car-btn-name { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 17px; color: #2b2b33; }
+.car-btn-tag { font-size: 11px; color: #8a97a8; }
+.car-btn.active { border-color: #2a9ee0; background: #eaf6ff; }
+
+.color-select { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; max-width: 320px; margin: 0 auto; }
+.swatch-btn {
+  cursor: pointer; width: 34px; height: 34px; border-radius: 50%; border: 3px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(40,60,90,0.25); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.swatch-btn.active { border-color: #2b2b33; transform: scale(1.15); }
+
+.diff-select { display: flex; gap: 8px; justify-content: center; }
+.diff-btn {
+  cursor: pointer; border: none; background: #ffffff; color: #4a5568; border-radius: 14px; padding: 9px 16px;
+  font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .06em;
+  box-shadow: 0 3px 10px rgba(40,60,90,0.15); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.diff-btn.active { background: #f5c518; color: #2b2b33; }
+
+.btn-primary {
+  cursor: pointer; border: none; background: #e6402c; color: #ffffff;
+  font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: .04em; padding: 14px 46px;
+  border-radius: 22px; box-shadow: 0 8px 22px rgba(230,64,44,0.4);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; margin-top: 6px;
+}
+.btn-start-pulse { animation: mrpulse 1.6s ease-in-out infinite; }
+.arcade-note { margin-top: 10px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: .12em; color: #4a5568; }
+
+.top5-wrap { margin-top: 18px; display: flex; flex-direction: column; gap: 4px; min-width: 230px; background: rgba(255,255,255,0.7); border-radius: 14px; padding: 10px 16px; }
+.top5-wrap[hidden] { display: none; }
+.top5-title { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 10px; letter-spacing: .2em; color: #2a9ee0; margin-bottom: 4px; }
+.top5-row { display: flex; justify-content: space-between; gap: 24px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 13px; color: #4a5568; }
+.top5-row .score { color: #e6402c; }
+
+.big-title { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 60px; color: #2a9ee0; margin-bottom: 12px; }
+
+.btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+.btn-green {
+  cursor: pointer; border: none; background: #39c46b; color: #fff; border-radius: 20px;
+  font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 18px; padding: 12px 32px;
+  box-shadow: 0 6px 16px rgba(57,196,107,0.4); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.btn-outline {
+  cursor: pointer; border: 3px solid #4a5568; background: transparent; color: #4a5568; border-radius: 20px;
+  font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 18px; padding: 9px 30px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.hint { margin-top: 14px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: .1em; color: #8a97a8; }
+
+/* ---------- countdown ---------- */
+.countdown-num {
+  font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: min(28vw,180px); color: #e6402c;
+  text-shadow: 4px 4px 0 #f5c518; animation: mrpop .5s ease-out;
+}
+
+/* ---------- podium / finished ---------- */
+.final-standings { display: flex; flex-direction: column; gap: 8px; width: min(360px, 90vw); margin-bottom: 16px; }
+.standing-row {
+  display: flex; align-items: center; gap: 12px; background: #ffffff; border-radius: 14px; padding: 10px 16px;
+  box-shadow: 0 3px 10px rgba(40,60,90,0.12); font-family: 'Nunito', sans-serif;
+}
+.standing-row.me { background: #fff3d6; border: 2px solid #f5c518; }
+.standing-rank { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 18px; color: #2a9ee0; width: 34px; text-align: left; }
+.standing-name { flex: 1; text-align: left; font-weight: 700; color: #2b2b33; }
+.standing-time { font-weight: 700; color: #4a5568; font-variant-numeric: tabular-nums; }
+
+.player-time-label { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 11px; letter-spacing: .2em; color: #4a5568; }
+.player-time { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 40px; color: #e6402c; margin-bottom: 8px; }
+
+.entry-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 6px; }
+.entry-wrap[hidden] { display: none; }
+.entry-note { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .1em; color: #e6402c; }
+.pseudo-input {
+  width: 150px; text-align: center; background: #ffffff; border: 3px solid #f5c518; color: #2b2b33; border-radius: 14px;
+  font-family: 'Baloo 2', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: .3em;
+  text-transform: uppercase; padding: 6px 0 6px 12px; outline: none;
+}
+.btn-amber {
+  cursor: pointer; border: none; background: #f5c518; color: #2b2b33; border-radius: 18px;
+  font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 16px; padding: 10px 32px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+
+.table-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.table-wrap[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  .pad-steer { width: 64px; height: 64px; font-size: 22px; }
+  .pad-gas, .pad-brake { width: 64px; height: 52px; font-size: 20px; }
+  .game-title { font-size: min(18vw,64px); }
+  .car-btn { padding: 8px 12px; }
+}

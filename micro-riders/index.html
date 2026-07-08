@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MICRO RIDERS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="game-root" oncontextmenu="return false;">
+
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud-wrap" data-hud="wrap" class="hud-wrap">
+    <div class="hud-topleft">
+      <div class="hud-position" data-hud="position">1er</div>
+      <div class="hud-lap" data-hud="lap">TOUR 1/3</div>
+    </div>
+    <div class="hud-topright">
+      <div class="hud-time" data-hud="time">0:00.0</div>
+      <div class="hud-speedrow">
+        <span data-hud="speed">0</span><span class="hud-unit">KM/H</span>
+      </div>
+    </div>
+    <button id="btn-pause" class="btn-pause">❚❚</button>
+  </div>
+
+  <!-- on-screen controls -->
+  <div id="hud-pads" data-hud="pads" class="hud-pads">
+    <div class="pad-cluster pad-cluster-left">
+      <button id="btn-steer-l" class="pad pad-steer">◄</button>
+      <button id="btn-steer-r" class="pad pad-steer">►</button>
+    </div>
+    <div class="pad-cluster pad-cluster-right">
+      <button id="btn-brake" class="pad pad-brake">▼</button>
+      <button id="btn-gas" class="pad pad-gas">▲</button>
+    </div>
+  </div>
+
+  <!-- START / SELECTION overlay -->
+  <div id="screen-start" class="overlay overlay-start">
+    <a href="../" class="btn-home">← ACCUEIL</a>
+    <div class="tagline">CIRCUIT ・ CHAMBRE D'ENFANT</div>
+    <div class="game-title">MICRO<br>RIDERS</div>
+
+    <div class="select-block">
+      <div class="select-label">VOITURE</div>
+      <div id="car-select" class="car-select"></div>
+    </div>
+
+    <div class="select-block">
+      <div class="select-label">COULEUR</div>
+      <div id="color-select" class="color-select"></div>
+    </div>
+
+    <div class="select-block">
+      <div class="select-label">DIFFICULTÉ DES BOTS</div>
+      <div id="diff-select" class="diff-select"></div>
+    </div>
+
+    <button id="btn-start" class="btn-primary btn-start-pulse">DÉMARRER</button>
+    <div class="arcade-note">3 TOURS ・ 3 ADVERSAIRES</div>
+
+    <div id="top5-start" class="top5-wrap" hidden>
+      <div class="top5-title">MEILLEURS TEMPS</div>
+      <div id="top5-start-list"></div>
+    </div>
+  </div>
+
+  <!-- COUNTDOWN overlay -->
+  <div id="screen-countdown" class="overlay overlay-countdown" hidden>
+    <div id="countdown-num" class="countdown-num">3</div>
+  </div>
+
+  <!-- PAUSE overlay -->
+  <div id="screen-paused" class="overlay overlay-pause" hidden>
+    <div class="tagline">PAUSE</div>
+    <div class="big-title">❚❚</div>
+    <div class="btn-row">
+      <button id="btn-resume" class="btn-green">REPRENDRE</button>
+      <button id="btn-menu-pause" class="btn-outline">MENU</button>
+    </div>
+    <div class="hint">ÉCHAP / P</div>
+  </div>
+
+  <!-- FINISHED / PODIUM overlay -->
+  <div id="screen-finished" class="overlay overlay-finished" hidden>
+    <div class="tagline">COURSE TERMINÉE</div>
+    <div id="final-standings" class="final-standings"></div>
+    <div class="player-time-label">TON TEMPS</div>
+    <div id="player-time" class="player-time">0:00.0</div>
+
+    <div id="entry-wrap" class="entry-wrap" hidden>
+      <div class="entry-note">NOUVEAU RECORD ・ TES INITIALES</div>
+      <input id="pseudo-input" data-hud="pseudo" maxlength="3" placeholder="AAA" class="pseudo-input">
+      <button id="btn-savescore" class="btn-amber">VALIDER</button>
+    </div>
+    <div id="table-wrap" class="table-wrap" hidden>
+      <div id="top5-finish" class="top5-wrap" hidden>
+        <div class="top5-title">MEILLEURS TEMPS</div>
+        <div id="top5-finish-list"></div>
+      </div>
+      <div class="btn-row">
+        <button id="btn-retry" class="btn-primary">REJOUER</button>
+        <button id="btn-menu-finish" class="btn-outline">MENU</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
