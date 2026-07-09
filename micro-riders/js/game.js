@@ -153,11 +153,20 @@ export class Game {
     car.progressTotal = car.lap * this.track.total + cp.distAlong;
     if (!car.finished && car.lap >= LAPS) { car.finished = true; car.finishTime = this.raceTime; }
 
+    car.surfaceGrip = 1; car.surfaceDrag = 0; car.surfaceSpeedCap = Infinity; car.onOil = false;
+
+    // off the drivable band: not a hard wall, but grass/floor-edge traction
+    // loss (lower grip) plus a speed cap — cutting a corner is always
+    // possible, but reliably slower and slidier than staying on the tarmac,
+    // rather than relying on the explode timer alone to discourage it
     const offBand = Math.abs(cp.lateral) - this.track.halfWidth;
-    if (offBand > 4) car.offTrackTime += dt; else car.offTrackTime = 0;
+    if (offBand > 4) {
+      car.offTrackTime += dt;
+      car.surfaceGrip = Math.min(car.surfaceGrip, TUNING.offTrackGripMul);
+      car.surfaceSpeedCap = Math.min(car.surfaceSpeedCap, TUNING.maxSpeed * TUNING.offTrackSpeedCapFrac);
+    } else car.offTrackTime = 0;
     if (car.offTrackTime > TUNING.offTrackLimit) this.explodeCar(car);
 
-    car.surfaceGrip = 1; car.surfaceDrag = 0; car.surfaceSpeedCap = Infinity; car.onOil = false;
     for (const surf of this.track.surfaces) {
       const d = Math.hypot(car.x - surf.x, car.y - surf.y);
       if (d < surf.r) {

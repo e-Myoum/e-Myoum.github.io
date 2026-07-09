@@ -22,6 +22,10 @@ const AVOID_WINDOW = 260;
 function findAvoidance(track, cp, lateralMax) {
   let best = null, bestDs = Infinity;
   for (const band of track.obstacleBands) {
+    // entirely outside the drivable band (e.g. the hairpin shortcut blockers,
+    // deliberately placed off-track) — a bot driving normally never reaches
+    // it, so it shouldn't trigger evasive steering just for passing nearby
+    if (band.latMin > lateralMax || band.latMax < -lateralMax) continue;
     let ds = band.s - cp.distAlong; if (ds < 0) ds += track.total;
     if (ds < AVOID_WINDOW && ds < bestDs) { bestDs = ds; best = band; }
   }
@@ -68,7 +72,7 @@ export function botInput(car, track, carModel, diffKey, bias, dt) {
   // corner-speed trim: compare heading further out to gauge curvature ahead
   const p2 = track.pointAt(cp.distAlong + lookahead + 220);
   const curve = Math.abs(normAngle(p2.heading - p1.heading));
-  const speedFrac = 1 - Math.min(1, curve / 1.1) * 0.55;
+  const speedFrac = 1 - Math.min(1, curve / 1.1) * diff.cornerAggro;
   const targetSpeed = TUNING.maxSpeed * carModel.maxSpeedMul * diff.speedMul * jitter * speedFrac;
 
   let gas = false, brake = false;

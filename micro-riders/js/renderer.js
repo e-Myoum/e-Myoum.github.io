@@ -86,6 +86,7 @@ export class Renderer {
     this.surfacesLayer(ctx, W, H, cam);
     this.decorLayer(ctx, W, H, cam);
     this.obstacleLayer(ctx, W, H, cam);
+    if (window.__mrDebugColliders) this.debugColliders(ctx, cam);
     this.particlesLayer(ctx, cam);
     this.carsLayer(ctx, cam);
     ctx.restore();
@@ -192,18 +193,41 @@ export class Renderer {
       else if (o.type === 'books') { if (!this.drawSprite(ctx, 'obsBooks', 120)) this.drawBookStack(ctx); }
       else if (o.type === 'marbles') { ctx.restore(); this.drawMarbleCluster(ctx, cam, o); continue; }
       else if (o.type === 'pencil') { if (!this.drawSprite(ctx, 'obsPencil', o.len + 40)) this.drawPencil(ctx, o); }
+      else if (o.type === 'bigblock') { if (!this.drawSprite(ctx, 'obsBigblock', 190)) this.drawBigBlock(ctx); }
       ctx.restore();
     }
   }
 
+  // A big toy chest — deliberately oversized and centered exactly on its
+  // (large) collider, since its job is to squarely block a shortcut rather
+  // than add a weaving challenge.
+  drawBigBlock(ctx) {
+    shadowEllipse(ctx, 190, 190);
+    const s = 125;
+    roundRectPath(ctx, -s / 2, -s / 2, s, s, 14);
+    ctx.fillStyle = '#c9752b'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 3; ctx.stroke();
+    roundRectPath(ctx, -s / 2 + 10, -s / 2 + 10, s - 20, s - 20, 8);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#f5c518';
+    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  // Drawn as a true bird's-eye view — nested squares centered on the
+  // collider circle (0,0), not stacked "rising up" off a ground shadow like
+  // an isometric sprite. That isometric-rising style was the actual cause of
+  // the hitbox-vs-art mismatch: the art sat well above the circle it was
+  // meant to represent. Every offset here stays small enough that the whole
+  // silhouette sits inside the r=46 collider (see track.js#_buildObstacles).
   drawBlockTower(ctx) {
-    shadowEllipse(ctx, 130, 60);
-    const colors = ['#f5c518', '#e6402c', '#2a9ee0'];
-    const sizes = [56, 44, 32];
-    let y = 6;
+    shadowEllipse(ctx, 100, 100);
+    const colors = ['#2a9ee0', '#e6402c', '#f5c518'];
+    const sizes = [58, 44, 28];
+    const offs = [[-3, -2], [3, 3], [-2, 4]];
     for (let i = 0; i < 3; i++) {
-      const s = sizes[i]; y -= s * 0.82;
-      ctx.save(); ctx.translate((i - 1) * 3, y); ctx.rotate((i - 1) * 0.08);
+      const s = sizes[i];
+      ctx.save(); ctx.translate(offs[i][0], offs[i][1]); ctx.rotate((i - 1) * 0.14);
       roundRectPath(ctx, -s / 2, -s / 2, s, s, 6);
       ctx.fillStyle = colors[i]; ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.stroke();
@@ -211,18 +235,24 @@ export class Renderer {
     }
   }
 
+  // Same top-down-centered principle: a messy pile of books seen from above
+  // (each book roughly the same size, splayed at small angles/offsets around
+  // the collider circle's center) rather than a tall stack that only reads
+  // right in a 3/4 perspective view.
   drawBookStack(ctx) {
-    shadowEllipse(ctx, 120, 56);
-    const colors = ['#2a9ee0', '#39c46b', '#e6402c', '#a855f7'];
-    const w = [110, 96, 86, 70];
-    let y = 14;
-    for (let i = 0; i < 4; i++) {
-      const bw = w[i], bh = 15; y -= bh;
-      ctx.save(); ctx.translate((i % 2 ? 4 : -4), y); ctx.rotate((i % 2 ? 1 : -1) * 0.03);
-      roundRectPath(ctx, -bw / 2, 0, bw, bh, 3);
-      ctx.fillStyle = colors[i % colors.length]; ctx.fill();
+    shadowEllipse(ctx, 92, 92);
+    const books = [
+      { w: 62, h: 42, rot: -0.22, off: [-3, 4], color: '#2a9ee0' },
+      { w: 58, h: 40, rot: 0.30, off: [4, -2], color: '#39c46b' },
+      { w: 50, h: 34, rot: -0.05, off: [-2, -4], color: '#e6402c' },
+      { w: 38, h: 26, rot: 0.55, off: [2, 2], color: '#a855f7' },
+    ];
+    for (const b of books) {
+      ctx.save(); ctx.translate(b.off[0], b.off[1]); ctx.rotate(b.rot);
+      roundRectPath(ctx, -b.w / 2, -b.h / 2, b.w, b.h, 4);
+      ctx.fillStyle = b.color; ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(-bw / 2 + 6, 2, bw - 12, 3);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(-b.w / 2 + 5, -b.h / 2 + 4, b.w - 10, 3);
       ctx.restore();
     }
   }
@@ -254,6 +284,28 @@ export class Renderer {
     ctx.beginPath(); ctx.moveTo(len / 2 + 16, 0); ctx.lineTo(len / 2 + 6, -5); ctx.lineTo(len / 2 + 6, 5); ctx.closePath();
     ctx.fillStyle = '#2b2b33'; ctx.fill();
     roundRectPath(ctx, -len / 2 - 12, -w / 2, 12, w, 3); ctx.fillStyle = '#ff7ac6'; ctx.fill();
+  }
+
+  // temporary verification aid — draws the actual physics collider shapes in
+  // magenta so hitbox/art alignment can be checked visually; toggled via
+  // window.__mrDebugColliders, not wired to any UI
+  debugColliders(ctx, cam) {
+    ctx.save(); ctx.translate(-cam.x, -cam.y);
+    ctx.strokeStyle = 'rgba(255,0,200,0.9)'; ctx.lineWidth = 2;
+    for (const o of this.game.track.obstacles) {
+      for (const c of o.colliders) {
+        ctx.beginPath();
+        if (c.x1 !== undefined) {
+          ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2);
+          ctx.stroke();
+          ctx.beginPath(); ctx.arc(c.x1, c.y1, c.r, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(c.x2, c.y2, c.r, 0, Math.PI * 2); ctx.stroke();
+        } else {
+          ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
   }
 
   // ---------- decor (purely cosmetic room props) ----------

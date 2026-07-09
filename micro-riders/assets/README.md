@@ -14,7 +14,7 @@ no other code changes are needed. Expected keys:
 
 - **Cars** (recolored at draw time to the player's chosen color):
   `carBuggy`, `carFlash`
-- **Obstacles**: `obsBlocks`, `obsBooks`, `obsMarble`, `obsPencil`
+- **Obstacles**: `obsBlocks`, `obsBooks`, `obsMarble`, `obsPencil`, `obsBigblock`
 - **Decor**: `decorBed`, `decorToybox`, `decorLamp`, `decorRugpatch`,
   `decorBall`, `decorBlockspair`, `decorSock`, `decorMarble`
 - **Hazard surfaces**: `surfOil`, `surfHoney`
