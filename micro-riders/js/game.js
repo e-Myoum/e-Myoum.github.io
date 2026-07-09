@@ -1,4 +1,4 @@
-import { CARS, COLOR_SWATCHES, LAPS, TUNING, BOT_NAMES, BOT_LINE_BIAS } from './config.js';
+import { CARS, COLOR_SWATCHES, LAPS, TUNING, BOT_NAMES, BOT_BIAS_BUCKETS } from './config.js';
 import { Track, closestOnCollider } from './track.js';
 import { makeCar, stepCar } from './car.js';
 import { botInput } from './ai.js';
@@ -36,6 +36,7 @@ export class Game {
     this.cam = { x: 0, y: 0 };
     this.particles = [];
 
+    this.renderer.loadSprites();
     fetchTop5().then(top5 => this.setState({ top5 }));
 
     window.addEventListener('resize', () => this.resize());
@@ -64,10 +65,15 @@ export class Game {
   carModel(id) { return CARS.find(c => c.id === id) || CARS[0]; }
 
   // (re)builds the 4 cars on the starting grid using the current selections.
+  // Each bot draws a random line-bias bucket (shuffled) plus a small skill
+  // jitter every time, so repeated races at the same difficulty don't play
+  // out identically.
   buildCars() {
     const st = this.state;
     const botColors = COLOR_SWATCHES.filter(c => c !== st.colorSel);
     for (let i = botColors.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0;[botColors[i], botColors[j]] = [botColors[j], botColors[i]]; }
+    const buckets = BOT_BIAS_BUCKETS.slice();
+    for (let i = buckets.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0;[buckets[i], buckets[j]] = [buckets[j], buckets[i]]; }
 
     this.cars = [];
     const playerSlot = this.track.gridSlot(0);
@@ -77,7 +83,9 @@ export class Game {
       const slot = this.track.gridSlot(i + 1);
       const carType = CARS[(i + 1) % CARS.length].id;
       const bot = makeCar({ x: slot.x, y: slot.y, heading: slot.heading, carType, color: botColors[i % botColors.length], isPlayer: false, name: BOT_NAMES[i] });
-      bot._bias = BOT_LINE_BIAS[i];
+      const [lo, hi] = buckets[i];
+      bot._bias = lo + Math.random() * (hi - lo);
+      bot._skillJitter = 0.9 + Math.random() * 0.2;
       this.cars.push(bot);
     }
     this.player = player;
@@ -129,8 +137,12 @@ export class Game {
     this.setState({ top5 });
   }
 
-  // ---------- per-car progress / lap tracking ----------
-  updateProgress(car) {
+  // ---------- per-car track state: lap/progress, off-track timer, hazards ----------
+  // One closestPoint() projection per car per frame feeds all three — lap
+  // counting (arc-length wrap), the off-track explode timer (lateral offset
+  // past the drivable band), and which hazard zone (if any) it's currently
+  // standing in.
+  updateTrackState(car, dt) {
     const cp = this.track.closestPoint(car.x, car.y);
     if (car._sInit) {
       if (car.lastS > this.track.total * 0.85 && cp.distAlong < this.track.total * 0.15) car.lap++;
@@ -140,6 +152,38 @@ export class Game {
     car.distAlong = cp.distAlong;
     car.progressTotal = car.lap * this.track.total + cp.distAlong;
     if (!car.finished && car.lap >= LAPS) { car.finished = true; car.finishTime = this.raceTime; }
+
+    const offBand = Math.abs(cp.lateral) - this.track.halfWidth;
+    if (offBand > 4) car.offTrackTime += dt; else car.offTrackTime = 0;
+    if (car.offTrackTime > TUNING.offTrackLimit) this.explodeCar(car);
+
+    car.surfaceGrip = 1; car.surfaceDrag = 0; car.surfaceSpeedCap = Infinity; car.onOil = false;
+    for (const surf of this.track.surfaces) {
+      const d = Math.hypot(car.x - surf.x, car.y - surf.y);
+      if (d < surf.r) {
+        if (surf.type === 'oil') { car.surfaceGrip = Math.min(car.surfaceGrip, TUNING.oilGripMul); car.onOil = true; }
+        else if (surf.type === 'honey') {
+          car.surfaceDrag = Math.max(car.surfaceDrag, TUNING.honeyDrag);
+          car.surfaceSpeedCap = Math.min(car.surfaceSpeedCap, TUNING.maxSpeed * TUNING.honeySpeedCapFrac);
+        }
+      }
+    }
+  }
+
+  explodeCar(car) {
+    if (car.exploding) return;
+    car.exploding = true; car.explodeT = 0; car.offTrackTime = 0;
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 220;
+      this.particles.push({ x: car.x, y: car.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, r: 4 + Math.random() * 5, boom: true });
+    }
+  }
+
+  respawnCar(car) {
+    const p = this.track.pointAt(car.distAlong);
+    car.x = p.x; car.y = p.y; car.heading = p.heading;
+    car.speed = 0; car.vx = 0; car.vy = 0;
+    car.exploding = false; car.explodeT = 0;
   }
 
   standings() {
@@ -154,13 +198,8 @@ export class Game {
   // ---------- collisions ----------
   resolveCollisions() {
     const R = TUNING.carRadius;
-    for (const car of this.cars) {
-      const corr = this.track.wallCorrection(car.x, car.y, R);
-      if (corr) {
-        car.x = corr.x; car.y = corr.y;
-        const dot = car.vx * corr.nx + car.vy * corr.ny;
-        if (dot < 0) { car.vx -= corr.nx * dot * (1 + TUNING.wallBounce); car.vy -= corr.ny * dot * (1 + TUNING.wallBounce); car.speed *= 0.72; }
-      }
+    const active = this.cars.filter(c => !c.exploding);
+    for (const car of active) {
       for (const obs of this.track.obstacles) {
         // resolve against only the single deepest-penetrating collider in this
         // cluster this frame — correcting against every overlapping collider
@@ -187,18 +226,29 @@ export class Game {
         }
       }
     }
-    for (let i = 0; i < this.cars.length; i++) {
-      for (let j = i + 1; j < this.cars.length; j++) {
-        const a = this.cars[i], b = this.cars[j];
+    // car-vs-car: a proper speed-scaled impulse rather than a fixed push, so
+    // a slow graze barely registers but a full-speed T-bone throws both cars
+    // hard — including into scenery, off the track, or into each other again.
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        const a = active[i], b = active[j];
         const dx = b.x - a.x, dy = b.y - a.y;
         const dist = Math.hypot(dx, dy) || 0.001;
         const minDist = R * 2;
         if (dist < minDist) {
-          const overlap = (minDist - dist) * 0.5, nx = dx / dist, ny = dy / dist;
+          const nx = dx / dist, ny = dy / dist;
+          const overlap = (minDist - dist) * 0.5;
           a.x -= nx * overlap; a.y -= ny * overlap;
           b.x += nx * overlap; b.y += ny * overlap;
-          a.vx -= nx * 40; a.vy -= ny * 40;
-          b.vx += nx * 40; b.vy += ny * 40;
+          const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+          const closing = -(rvx * nx + rvy * ny);
+          if (closing > 0) {
+            const impulse = Math.min(TUNING.carCarImpulseCap, closing * (1 + TUNING.carCarRestitution) * 0.5);
+            a.vx -= nx * impulse; a.vy -= ny * impulse;
+            b.vx += nx * impulse; b.vy += ny * impulse;
+            const severity = Math.min(1, closing / 500);
+            a.speed *= 1 - 0.35 * severity; b.speed *= 1 - 0.35 * severity;
+          }
         }
       }
     }
@@ -208,11 +258,16 @@ export class Game {
   step(dt) {
     for (const car of this.cars) {
       if (car.finished) continue;
+      if (car.exploding) {
+        car.explodeT += dt;
+        if (car.explodeT > TUNING.respawnDelay) this.respawnCar(car);
+        continue;
+      }
       const input = car.isPlayer ? this.input : botInput(car, this.track, this.carModel(car.carType), this.state.diffSel, car._bias, dt);
       stepCar(car, input, dt, this.carModel(car.carType));
     }
     this.resolveCollisions();
-    for (const car of this.cars) if (!car.finished) this.updateProgress(car);
+    for (const car of this.cars) if (!car.finished && !car.exploding) this.updateTrackState(car, dt);
     this.raceTime += dt;
 
     const standings = this.standings();
@@ -267,7 +322,10 @@ export class Game {
       }
     }
     for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i]; p.life -= dt * 1.4; p.x += p.vx * dt; p.y += p.vy * dt;
+      const p = this.particles[i];
+      const drag = p.boom ? 2.2 : 1.4;
+      p.life -= dt * drag; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.boom) { p.vx *= 1 - dt * 2; p.vy *= 1 - dt * 2; }
       if (p.life <= 0) this.particles.splice(i, 1);
     }
   }

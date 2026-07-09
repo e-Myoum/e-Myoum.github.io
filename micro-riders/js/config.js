@@ -27,11 +27,13 @@ export const COLOR_SWATCHES = [
 
 // Bot skill presets. speedMul scales a bot's effective top speed against the
 // player's TUNING.maxSpeed; steerNoise adds heading jitter (imperfect line);
-// steerGain is how sharply a bot corrects toward its target point.
+// steerGain is how sharply a bot corrects toward its target point. lineSpread
+// widens/narrows the random racing-line bias bots get assigned each race (see
+// Game#buildCars) — lower difficulties wander a wider, sloppier range of lines.
 export const DIFFICULTIES = {
-  facile: { label: 'FACILE', speedMul: 0.72, steerNoise: 0.34, steerGain: 2.0, brakeSkill: 0.6 },
-  normal: { label: 'NORMAL', speedMul: 0.86, steerNoise: 0.15, steerGain: 2.4, brakeSkill: 0.8 },
-  difficile: { label: 'DIFFICILE', speedMul: 1.0, steerNoise: 0.05, steerGain: 2.85, brakeSkill: 1.0 },
+  facile: { label: 'FACILE', speedMul: 0.72, steerNoise: 0.34, steerGain: 2.0, brakeSkill: 0.6, lineSpread: 1.3 },
+  normal: { label: 'NORMAL', speedMul: 0.86, steerNoise: 0.15, steerGain: 2.4, brakeSkill: 0.8, lineSpread: 1.0 },
+  difficile: { label: 'DIFFICILE', speedMul: 1.0, steerNoise: 0.05, steerGain: 2.85, brakeSkill: 1.0, lineSpread: 0.7 },
 };
 
 export const LAPS = 3;
@@ -46,14 +48,32 @@ export const TUNING = {
   coastDecel: 260,
   turnRate: 3.05,        // rad/s at full speed
   turnRateLowSpeedFloor: 0.42, // fraction of turnRate kept at near-zero speed
-  grip: 6.2,             // 1/s — how fast velocity vector snaps to heading (lower = more drift)
-  wallBounce: 0.35,      // speed retained (as a fraction, negated) on hard wall hits
+  grip: 4.0,             // 1/s — how fast velocity vector snaps to heading (lower = more drift)
+  gripSlipSteer: 0.55,   // extra grip lost (fraction) steering hard at full speed — the harder/faster you turn, the more the tail slides
   obstacleBounce: 0.4,
-  carCarPush: 260,       // separation impulse strength between overlapping cars
+  carCarRestitution: 0.55, // "bounciness" of car-vs-car hits — impulse scales with closing speed, so a graze stays soft and a T-bone throws both cars hard
+  carCarImpulseCap: 900,
+  offTrackLimit: 3.0,    // seconds fully off the drivable band before a car explodes
+  respawnDelay: 1.1,     // seconds frozen (exploded) before respawning back on track
+  oilGripMul: 0.16,      // grip multiplier while on a soap/oil slick — the car barely bites, mostly slides
+  honeyDrag: 220,        // extra deceleration (u/s^2) while on a honey patch — must stay below the weakest car's accel or a car that stops on it can never move again
+  honeySpeedCapFrac: 0.35, // fraction of top speed a car is capped to while on honey — this (not the drag) is what makes it feel "stuck slow", so it never fights to a standstill
 };
 
 export const BOT_NAMES = ['RASTA', 'PIXEL', 'CROC'];
 
-// Per-bot fixed racing-line lateral bias (fraction of half track-width, applied
-// inside the drivable band) — keeps the 3 bots from all hugging the same line.
-export const BOT_LINE_BIAS = [-0.35, 0.0, 0.35];
+// Racing-line bias buckets bots randomly draw from each race (shuffled, one
+// bucket per bot — see Game#buildCars), instead of a fixed line every time.
+export const BOT_BIAS_BUCKETS = [[-0.55, -0.15], [-0.15, 0.15], [0.15, 0.55]];
+
+// Sprite manifest: draw key -> file name under assets/. Empty for now — every
+// Renderer draw method already checks `this.spr[key]` first and falls back to
+// the existing vector art, so dropping art files in assets/ and adding the
+// matching entries here is the only step needed to switch a piece over to a
+// sprite later; no other code changes. Expected keys, for when that art shows
+// up: carBuggy, carFlash (cars — tinted at draw time by the player's chosen
+// color, see Renderer#drawTintedSprite); obsBlocks, obsBooks, obsMarble,
+// obsPencil (obstacles); decorBed, decorToybox, decorLamp, decorRugpatch,
+// decorBall, decorBlockspair, decorSock, decorMarble (decor); surfOil,
+// surfHoney (hazard zones).
+export const SPRITE_MANIFEST = {};
