@@ -1,11 +1,12 @@
 import { CARS, COLOR_SWATCHES, DIFFICULTIES } from './config.js';
+import { TRACK_LIST } from './tracks/index.js';
 import { carSpeedKmh } from './car.js';
 
 const toCamel = (id) => id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
 
 const OVERLAY_IDS = [
   'screen-start', 'screen-countdown', 'screen-paused', 'screen-finished',
-  'car-select', 'color-select', 'diff-select', 'top5-start', 'top5-start-list',
+  'circuit-tagline', 'track-select', 'car-select', 'color-select', 'diff-select', 'top5-start', 'top5-start-list',
   'countdown-num',
   'final-standings', 'player-time', 'entry-wrap', 'table-wrap', 'top5-finish', 'top5-finish-list',
 ];
@@ -34,6 +35,16 @@ export class UI {
 
   _buildSelectionWidgets() {
     const g = this.game;
+    if (this.els.trackSelect) {
+      this.els.trackSelect.innerHTML = '';
+      TRACK_LIST.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'car-btn'; btn.dataset.track = t.id;
+        btn.innerHTML = '<span class="car-btn-name">' + t.label + '</span><span class="car-btn-tag">' + t.tagline + '</span>';
+        btn.addEventListener('click', () => g.setTrackSel(t.id));
+        this.els.trackSelect.appendChild(btn);
+      });
+    }
     if (this.els.carSelect) {
       this.els.carSelect.innerHTML = '';
       CARS.forEach(car => {
@@ -111,6 +122,11 @@ export class UI {
     el.screenPaused.hidden = st.screen !== 'paused';
     el.screenFinished.hidden = st.screen !== 'finished';
 
+    if (el.trackSelect) Array.from(el.trackSelect.children).forEach(b => b.classList.toggle('active', b.dataset.track === st.trackSel));
+    if (el.circuitTagline) {
+      const t = TRACK_LIST.find(t => t.id === st.trackSel) || TRACK_LIST[0];
+      el.circuitTagline.textContent = 'CIRCUIT ・ ' + t.label;
+    }
     if (el.carSelect) Array.from(el.carSelect.children).forEach(b => b.classList.toggle('active', b.dataset.car === st.carSel));
     if (el.colorSelect) Array.from(el.colorSelect.children).forEach(b => b.classList.toggle('active', b.dataset.color === st.colorSel));
     if (el.diffSelect) Array.from(el.diffSelect.children).forEach(b => b.classList.toggle('active', b.dataset.diff === st.diffSel));

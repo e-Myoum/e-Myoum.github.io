@@ -1,41 +1,20 @@
-// The circuit is built by walking a sequence of straight/arc "turtle" moves —
-// far more flexible than a fixed rounded-rectangle, and closure is free: any
-// move sequence whose net heading change is exactly 180° closes into a full
-// loop when run twice in a row (the second run is the point-symmetric mirror
-// of the first, so the total displacement cancels automatically). That's the
-// only constraint move lists below have to satisfy.
-export const TRACK_WIDTH = 220;
+// The circuit engine: any track is built by walking a sequence of
+// straight/arc "turtle" moves — far more flexible than a fixed
+// rounded-rectangle, and closure is free: any move sequence whose net
+// heading change is exactly 180° closes into a full loop when run twice in
+// a row (the second run is the point-symmetric mirror of the first, so the
+// total displacement cancels automatically). That's the only constraint a
+// track's `halfMoves` has to satisfy. Actual track content (the move list,
+// obstacles/decor/hazards, floor theme) lives in js/tracks/*.js — this file
+// is the theme-agnostic engine those definitions run on.
+import { TRACK_DEFS } from './tracks/index.js';
 
 const STEP_LINEAR = 20;
 const STEP_ANGLE_DEG = 6;
 
-// One half of the lap: a long straight into an S-chicane, another straight
-// into a wide sweeping corner, a straight into a tight hook-shaped hairpin —
-// net heading change is exactly 180° (30-60-30 chicane nets 0, the sweep
-// nets 90, the hairpin's 135/-45 hook nets 90). Run twice, this closes into
-// a self-intersection-free lap (verified offline) with a noticeably
-// different feel corner to corner instead of a uniform oval. Scaled up ~1.4x
-// from the original draft — a uniform scale changes no angles, so closure is
-// still exact — both to make the lap longer and so cutting a corner saves
-// less distance in proportion to the whole lap.
-const SCALE = 1.4;
-const HALF_MOVES = [
-  { straight: 420 * SCALE },
-  { arc: { radius: 190 * SCALE, angle: -30 } }, { straight: 70 * SCALE }, { arc: { radius: 190 * SCALE, angle: 60 } }, { straight: 70 * SCALE }, { arc: { radius: 190 * SCALE, angle: -30 } },
-  { straight: 260 * SCALE },
-  { arc: { radius: 260 * SCALE, angle: 90 } },
-  { straight: 240 * SCALE },
-  { arc: { radius: 160 * SCALE, angle: 135 } }, { straight: 40 * SCALE }, { arc: { radius: 160 * SCALE, angle: -45 } },
-];
-// The hairpin (last 3 moves above) is the one feature sharp enough that a
-// straight-line "beeline" through its inside saves real distance versus
-// following the curve — see below (`hairpinBlockerLocal`) for how that's
-// physically blocked rather than just discouraged.
-const HAIRPIN_MOVES = HALF_MOVES.slice(-3);
+export function moveLength(m) { return m.straight != null ? m.straight : Math.abs(m.arc.angle) * Math.PI / 180 * m.arc.radius; }
 
-function moveLength(m) { return m.straight != null ? m.straight : Math.abs(m.arc.angle) * Math.PI / 180 * m.arc.radius; }
-
-function buildTurtlePath(moves) {
+export function buildTurtlePath(moves) {
   let x = 0, y = 0, heading = 0;
   const pts = [{ x, y }];
   for (const m of moves) {
@@ -63,24 +42,8 @@ function buildTurtlePath(moves) {
   return pts;
 }
 
-// local-frame (hairpin entry heading = 0, entry position = origin) midpoint
-// of the straight-line "beeline" across the hairpin — the point a car
-// cutting straight through the hairpin's inside instead of following the
-// curve would pass closest to. A sharp hairpin's chord is meaningfully
-// shorter than its arc (for this one: ~140 units over a ~545-unit feature),
-// so without something solid actually in the way there, a car that ignores
-// the curve entirely is *faster* even after the off-track speed penalty —
-// see Track#_buildObstacles for how this gets a "bigblock" placed on it.
-const HAIRPIN_START_S = HALF_MOVES.slice(0, -3).reduce((s, m) => s + moveLength(m), 0);
-const HALF_LENGTH = HALF_MOVES.reduce((s, m) => s + moveLength(m), 0);
-function hairpinChordMidpointLocal() {
-  const pts = buildTurtlePath(HAIRPIN_MOVES);
-  const p0 = pts[0], p1 = pts[pts.length - 1];
-  return { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
-}
-
-function buildCenterline() {
-  const pts = buildTurtlePath(HALF_MOVES.concat(HALF_MOVES));
+function buildCenterline(halfMoves) {
+  const pts = buildTurtlePath(halfMoves.concat(halfMoves));
   // the walk closes back onto its own start point — drop the near-duplicate
   // last sample so the loop doesn't have a zero-length closing segment
   const first = pts[0], last = pts[pts.length - 1];
@@ -92,6 +55,35 @@ function buildCenterline() {
   const offX = margin - minX, offY = margin - minY;
   for (const p of pts) { p.x += offX; p.y += offY; }
   return { pts, worldW: maxX - minX + margin * 2, worldH: maxY - minY + margin * 2 };
+}
+
+// Finds the local-frame (entry heading = 0, entry position = origin)
+// midpoint of the straight-line "beeline" across a sharp feature — the
+// point a car cutting straight through its inside instead of following the
+// curve would pass closest to — and returns its world position for both
+// occurrences of a track's half. A sharp hairpin-style hook's chord is
+// meaningfully shorter than its arc, so without something solid actually in
+// the way there, a car that ignores the curve entirely is *faster* even
+// after the off-track speed penalty. `hookMoves` must be a contiguous
+// trailing slice of `halfMoves` (i.e. the last N entries) — see each
+// track's own `halfMoves` for where its hook sits.
+export function shortcutBlockerPositions(track, halfMoves, hookMoves) {
+  const hookStartS = halfMoves.slice(0, halfMoves.length - hookMoves.length).reduce((s, m) => s + moveLength(m), 0);
+  const halfLen = halfMoves.reduce((s, m) => s + moveLength(m), 0);
+  const pts = buildTurtlePath(hookMoves);
+  const p0 = pts[0], p1 = pts[pts.length - 1];
+  const localMid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+  const positions = [];
+  for (let k = 0; k < 2; k++) {
+    const sStart = k * halfLen + hookStartS;
+    const entry = track.pointAt(sStart);
+    const H = entry.heading;
+    positions.push({
+      x: entry.x + localMid.x * Math.cos(H) - localMid.y * Math.sin(H),
+      y: entry.y + localMid.x * Math.sin(H) + localMid.y * Math.cos(H),
+    });
+  }
+  return positions;
 }
 
 // Reduces either collider shape to "the nearest point on it, plus its radius"
@@ -119,9 +111,16 @@ function colliderSamples(c) {
   return c.x1 !== undefined ? [{ x: c.x1, y: c.y1, r: c.r }, { x: c.x2, y: c.y2, r: c.r }] : [{ x: c.x, y: c.y, r: c.r }];
 }
 
+export { TRACK_DEFS };
+
 export class Track {
-  constructor() {
-    const built = buildCenterline();
+  constructor(trackId) {
+    const def = TRACK_DEFS[trackId] || TRACK_DEFS[Object.keys(TRACK_DEFS)[0]];
+    this.id = def.id;
+    this.label = def.label;
+    this.tagline = def.tagline;
+    this.floorTheme = def.floorTheme;
+    const built = buildCenterline(def.halfMoves);
     this.points = built.pts;
     this.worldW = built.worldW;
     this.worldH = built.worldH;
@@ -130,17 +129,18 @@ export class Track {
     this.s[0] = 0;
     for (let i = 1; i < n; i++) this.s[i] = this.s[i - 1] + this._dist(i - 1, i);
     this.total = this.s[n - 1] + this._dist(n - 1, 0);
-    this.halfWidth = TRACK_WIDTH / 2;
+    this.halfWidth = def.trackWidth / 2;
     this.center = { x: this.worldW / 2, y: this.worldH / 2 };
-    this.obstacles = this._buildObstacles();
-    this.decor = this._buildDecor();
-    this.surfaces = this._buildSurfaces();
+    this.obstacles = def.buildObstacles(this);
+    this.decor = def.buildDecor(this);
+    this.surfaces = def.buildSurfaces(this);
     // per-obstacle lateral "band" (min/max lateral reach across all its
     // colliders, plus its arc-length position), pre-projected once up front.
     // The AI treats each obstacle as one blocked band rather than reasoning
-    // about individual sub-colliders — a multi-collider prop like the pencil
-    // has sub-circles only ~10 arc-length units apart, so picking "nearest
-    // collider" per frame would flip between them and never commit to a side.
+    // about individual sub-colliders — a multi-collider prop like a diagonal
+    // capsule obstacle has sub-samples only ~10 arc-length units apart, so
+    // picking "nearest collider" per frame would flip between them and
+    // never commit to a side.
     this.obstacleBands = this.obstacles.map(obs => {
       let sMin = Infinity, latMin = Infinity, latMax = -Infinity;
       for (const c of obs.colliders) {
@@ -152,6 +152,13 @@ export class Track {
         }
       }
       return { s: sMin, latMin, latMax };
+    });
+    // same idea, but for oil/water slicks — only difficulty-gated "hazard
+    // aware" bots (see ai.js) route around these when convenient, since
+    // unlike obstacles they're not something everyone has to dodge
+    this.hazardBands = this.surfaces.filter(s => s.type === 'oil' || s.type === 'water').map(surf => {
+      const cp = this.closestPoint(surf.x, surf.y);
+      return { s: cp.distAlong, latMin: cp.lateral - surf.r, latMax: cp.lateral + surf.r };
     });
   }
 
@@ -207,76 +214,5 @@ export class Track {
   gridSlot(index) {
     const row = Math.floor(index / 2), lane = index % 2;
     return this.offsetPoint(-(60 + row * 78), lane === 0 ? -46 : 46);
-  }
-
-  _buildObstacles() {
-    const T = this.total;
-    const list = [];
-    // block tower — juts in from one edge of the second straight (post-chicane)
-    { const p = this.offsetPoint(T * 0.226, this.halfWidth * 0.62); list.push({ type: 'blocks', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 46 }] }); }
-    // book stack — juts in from the outer edge near the wide sweeping corner
-    { const p = this.offsetPoint(T * 0.30, -this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 44 }] }); }
-    // spilled marbles — small cluster before the hairpin, spaced wide enough
-    // (surface gap > 2x car radius) that a car can thread between them
-    {
-      const p1 = this.offsetPoint(T * 0.36, -12), p2 = this.offsetPoint(T * 0.372, 22), p3 = this.offsetPoint(T * 0.385, -18);
-      list.push({ type: 'marbles', x: p2.x, y: p2.y, colliders: [{ x: p1.x, y: p1.y, r: 15 }, { x: p2.x, y: p2.y, r: 15 }, { x: p3.x, y: p3.y, r: 15 }] });
-    }
-    // pencil, laid diagonally across the straight after the hairpin — a single
-    // capsule (not a chain of circles) so there's no notch a car could wedge
-    // itself into between adjacent sub-colliders
-    {
-      const c = this.offsetPoint(T * 0.56, 0);
-      const ang = c.heading + 0.6, halfLen = 76;
-      const x1 = c.x - Math.cos(ang) * halfLen, y1 = c.y - Math.sin(ang) * halfLen;
-      const x2 = c.x + Math.cos(ang) * halfLen, y2 = c.y + Math.sin(ang) * halfLen;
-      list.push({ type: 'pencil', x: c.x, y: c.y, angle: ang, len: 150, colliders: [{ x1, y1, x2, y2, r: 13 }] });
-    }
-    // second-half variety: another block tower and book stack, offset to the
-    // opposite side of the track from their first-half counterparts
-    { const p = this.offsetPoint(T * 0.726, -this.halfWidth * 0.6); list.push({ type: 'blocks', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 46 }] }); }
-    { const p = this.offsetPoint(T * 0.83, this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 44 }] }); }
-    // a big toy chest sitting squarely on the straight-line shortcut across
-    // each hairpin (both occurrences) — physically blocks the cut instead of
-    // just discouraging it, see hairpinChordMidpointLocal() above
-    const localMid = hairpinChordMidpointLocal();
-    for (let k = 0; k < 2; k++) {
-      const sStart = k * HALF_LENGTH + HAIRPIN_START_S;
-      const entry = this.pointAt(sStart);
-      const H = entry.heading;
-      const wx = entry.x + localMid.x * Math.cos(H) - localMid.y * Math.sin(H);
-      const wy = entry.y + localMid.x * Math.sin(H) + localMid.y * Math.cos(H);
-      list.push({ type: 'bigblock', x: wx, y: wy, colliders: [{ x: wx, y: wy, r: 95 }] });
-    }
-    return list;
-  }
-
-  // non-collidable zones that modify a car's handling while it's inside them
-  // (see game.js#applySurfaces) rather than blocking it — the slick/sticky
-  // spots the difficulty comes from, not solid geometry.
-  _buildSurfaces() {
-    const T = this.total;
-    const list = [];
-    // soap/oil slicks right in the two chicanes — exactly where losing grip hurts most
-    { const p = this.offsetPoint(T * 0.143, 0); list.push({ type: 'oil', x: p.x, y: p.y, r: 70 }); }
-    { const p = this.offsetPoint(0.5 * T + T * 0.143, 0); list.push({ type: 'oil', x: p.x, y: p.y, r: 70 }); }
-    // honey patches on the straights after the wide corners — sticky, saps speed
-    { const p = this.offsetPoint(T * 0.363, this.halfWidth * 0.4); list.push({ type: 'honey', x: p.x, y: p.y, r: 62 }); }
-    { const p = this.offsetPoint(T * 0.879, -this.halfWidth * 0.4); list.push({ type: 'honey', x: p.x, y: p.y, r: 62 }); }
-    return list;
-  }
-
-  _buildDecor() {
-    const w = this.worldW, h = this.worldH;
-    return [
-      { type: 'bed', x: w * 0.5, y: h * 0.46, scale: 1 },
-      { type: 'toybox', x: w * 0.08, y: h * 0.85, scale: 1 },
-      { type: 'lamp', x: w * 0.93, y: h * 0.1, scale: 1 },
-      { type: 'rugpatch', x: w * 0.1, y: h * 0.12, scale: 1.1 },
-      { type: 'ball', x: w * 0.92, y: h * 0.88, scale: 1 },
-      { type: 'blockspair', x: w * 0.3, y: h * 0.9, scale: 1 },
-      { type: 'sock', x: w * 0.7, y: h * 0.08, scale: 1 },
-      { type: 'marble', x: w * 0.03, y: h * 0.5, scale: 1 },
-    ];
   }
 }

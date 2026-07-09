@@ -17,13 +17,13 @@ export class Game {
     this.root = root;
     this.canvas = document.getElementById('game-canvas');
     this.ctx = this.canvas.getContext('2d');
-    this.track = new Track();
 
     const prefs = loadPrefs();
-    const cached = loadCachedTop5();
+    this.track = new Track(prefs.trackId);
+    const cached = loadCachedTop5(this.track.id);
     this.state = {
       screen: 'start',
-      carSel: prefs.carId, colorSel: prefs.color, diffSel: prefs.difficulty,
+      trackSel: this.track.id, carSel: prefs.carId, colorSel: prefs.color, diffSel: prefs.difficulty,
       countdown: COUNTDOWN_FROM,
       position: 1, lap: 1, laps: LAPS, raceTimeStr: '0.0',
       standings: [], playerTime: 0, qualifies: false, saved: false, top5: cached,
@@ -37,7 +37,7 @@ export class Game {
     this.particles = [];
 
     this.renderer.loadSprites();
-    fetchTop5().then(top5 => this.setState({ top5 }));
+    fetchTop5(this.track.id).then(top5 => this.setState({ top5 }));
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -103,9 +103,18 @@ export class Game {
   }
 
   // ---------- selection screen ----------
-  setCarSel(id) { this.state.carSel = id; this.player.carType = id; savePrefs({ carId: id, color: this.state.colorSel, difficulty: this.state.diffSel }); this.setState({ carSel: id }); }
-  setColorSel(color) { this.state.colorSel = color; this.player.color = color; savePrefs({ carId: this.state.carSel, color, difficulty: this.state.diffSel }); this.setState({ colorSel: color }); }
-  setDiffSel(key) { savePrefs({ carId: this.state.carSel, color: this.state.colorSel, difficulty: key }); this.setState({ diffSel: key }); }
+  _prefsPatch(patch) { return { carId: this.state.carSel, color: this.state.colorSel, difficulty: this.state.diffSel, trackId: this.state.trackSel, ...patch }; }
+  setCarSel(id) { this.state.carSel = id; this.player.carType = id; savePrefs(this._prefsPatch({ carId: id })); this.setState({ carSel: id }); }
+  setColorSel(color) { this.state.colorSel = color; this.player.color = color; savePrefs(this._prefsPatch({ color })); this.setState({ colorSel: color }); }
+  setDiffSel(key) { savePrefs(this._prefsPatch({ difficulty: key })); this.setState({ diffSel: key }); }
+  setTrackSel(id) {
+    if (this.state.screen !== 'start' || id === this.state.trackSel) return;
+    this.track = new Track(id);
+    savePrefs(this._prefsPatch({ trackId: id }));
+    this.setState({ trackSel: id, top5: loadCachedTop5(id) });
+    this.buildCars();
+    fetchTop5(id).then(top5 => { if (this.state.trackSel === id) this.setState({ top5 }); });
+  }
 
   // ---------- race flow ----------
   startRace() {
@@ -142,7 +151,7 @@ export class Game {
     let name = (this.ui.pseudoValue() || 'AAA').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
     if (!name) name = 'AAA';
     this.setState({ saved: true });
-    const top5 = await submitScore(name, this.state.playerTime);
+    const top5 = await submitScore(this.track.id, name, this.state.playerTime);
     this.setState({ top5 });
   }
 
