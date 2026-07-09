@@ -1,20 +1,25 @@
 // Playable car models. `body` is a polygon in local car-space (x forward, y right,
 // origin at the car's center) used both for rendering and as the visual silhouette;
 // physics always uses a single bounding circle (see TUNING.carRadius) for collisions.
+// `slipMul` (car.js) scales how much grip a car loses specifically from
+// steering hard at speed — Flash's edge over Buggy is concentrated there
+// (fine in a straight line, twitchy the moment you carry speed into a
+// corner) rather than being generally slidier everywhere, which read as
+// just "worse" instead of "a different trade-off".
 export const CARS = [
   {
     id: 'buggy',
     name: 'BUGGY',
     tagline: 'Tout-terrain, accroche partout',
     length: 44, width: 26,
-    accelMul: 0.92, maxSpeedMul: 0.92, gripMul: 1.15, turnMul: 1.1,
+    accelMul: 0.98, maxSpeedMul: 0.92, gripMul: 1.15, turnMul: 1.1, slipMul: 1.0,
   },
   {
     id: 'flash',
     name: 'FLASH',
     tagline: 'Chassis bas, pointe de vitesse',
     length: 46, width: 22,
-    accelMul: 1.08, maxSpeedMul: 1.08, gripMul: 0.9, turnMul: 0.95,
+    accelMul: 0.80, maxSpeedMul: 1.10, gripMul: 1.0, turnMul: 0.95, slipMul: 1.8,
   },
 ];
 
@@ -34,9 +39,9 @@ export const COLOR_SWATCHES = [
 // get assigned each race (see Game#buildCars) — lower difficulties wander a
 // wider, sloppier range of lines.
 export const DIFFICULTIES = {
-  facile: { label: 'FACILE', speedMul: 0.80, steerNoise: 0.28, steerGain: 2.2, brakeSkill: 0.7, lineSpread: 1.2, cornerAggro: 0.62 },
-  normal: { label: 'NORMAL', speedMul: 0.95, steerNoise: 0.12, steerGain: 2.7, brakeSkill: 0.92, lineSpread: 0.95, cornerAggro: 0.48 },
-  difficile: { label: 'DIFFICILE', speedMul: 1.05, steerNoise: 0.03, steerGain: 3.1, brakeSkill: 1.0, lineSpread: 0.6, cornerAggro: 0.35 },
+  facile: { label: 'FACILE', speedMul: 0.88, steerNoise: 0.22, steerGain: 2.4, brakeSkill: 0.85, lineSpread: 1.1, cornerAggro: 0.55 },
+  normal: { label: 'NORMAL', speedMul: 1.0, steerNoise: 0.09, steerGain: 2.9, brakeSkill: 0.97, lineSpread: 0.85, cornerAggro: 0.42 },
+  difficile: { label: 'DIFFICILE', speedMul: 1.1, steerNoise: 0.02, steerGain: 3.3, brakeSkill: 1.0, lineSpread: 0.5, cornerAggro: 0.30 },
 };
 
 export const LAPS = 3;

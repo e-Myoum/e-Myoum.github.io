@@ -59,9 +59,10 @@ export function stepCar(car, input, dt, carModel) {
 
   const hx = Math.cos(car.heading), hy = Math.sin(car.heading);
   const targetVx = hx * car.speed, targetVy = hy * car.speed;
-  // grip drops the harder you steer at speed (the tail steps out mid-corner)
-  // and drops hard on a soap/oil slick — both funnel through the same knob
-  const slipPenalty = 1 - t.gripSlipSteer * Math.abs(input.steer) * speedFrac;
+  // grip drops the harder you steer at speed (the tail steps out mid-corner),
+  // scaled per-car by slipMul (Flash loses much more here than Buggy), and
+  // drops hard on a soap/oil slick — all three funnel through the same knob
+  const slipPenalty = 1 - t.gripSlipSteer * (carModel.slipMul ?? 1) * Math.abs(input.steer) * speedFrac;
   const grip = t.grip * carModel.gripMul * Math.max(0.15, slipPenalty) * car.surfaceGrip;
   const lerp = Math.min(1, grip * dt);
   car.vx += (targetVx - car.vx) * lerp;

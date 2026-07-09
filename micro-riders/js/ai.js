@@ -77,7 +77,7 @@ export function botInput(car, track, carModel, diffKey, bias, dt) {
 
   let gas = false, brake = false;
   if (car.speed < targetSpeed * 0.96) gas = true;
-  else if (car.speed > targetSpeed * 1.04) { if (Math.random() < Math.min(1, diff.brakeSkill * jitter)) brake = true; }
+  else if (car.speed > targetSpeed * 1.04) { if (Math.random() < diff.brakeSkill) brake = true; }
 
   return { steer, gas, brake };
 }

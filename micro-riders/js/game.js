@@ -81,11 +81,20 @@ export class Game {
     this.cars.push(player);
     for (let i = 0; i < 3; i++) {
       const slot = this.track.gridSlot(i + 1);
-      const carType = CARS[(i + 1) % CARS.length].id;
+      // randomized per race, not a fixed formula — that formula used to hand
+      // 2 of the 3 bots the faster car every single race, making the bot on
+      // the slower model look permanently weak regardless of any AI tuning
+      const carType = CARS[(Math.random() * CARS.length) | 0].id;
       const bot = makeCar({ x: slot.x, y: slot.y, heading: slot.heading, carType, color: botColors[i % botColors.length], isPlayer: false, name: BOT_NAMES[i] });
       const [lo, hi] = buckets[i];
       bot._bias = lo + Math.random() * (hi - lo);
-      bot._skillJitter = 0.9 + Math.random() * 0.2;
+      // small per-race personality variance, not a skill lottery: kept tight
+      // so the 3 bots stay roughly matched instead of one rolling well above
+      // the other two (see ai.js — brakeSkill deliberately isn't jittered at
+      // all, since it's a probability capped at 1.0: jitter above 1 is
+      // wasted by the cap while jitter below 1 always hurts, which used to
+      // make the unlucky bot look uniquely clumsy in corners every race)
+      bot._skillJitter = 0.97 + Math.random() * 0.06;
       this.cars.push(bot);
     }
     this.player = player;
@@ -145,8 +154,14 @@ export class Game {
   updateTrackState(car, dt) {
     const cp = this.track.closestPoint(car.x, car.y);
     if (car._sInit) {
-      if (car.lastS > this.track.total * 0.85 && cp.distAlong < this.track.total * 0.15) car.lap++;
-      else if (car.lastS < this.track.total * 0.15 && cp.distAlong > this.track.total * 0.85) car.lap = Math.max(0, car.lap - 1);
+      if (car.lastS > this.track.total * 0.85 && cp.distAlong < this.track.total * 0.15) {
+        // the grid starts a little behind the line (see Track#gridSlot), so
+        // every car's very first line crossing is just leaving the grid, not
+        // a completed lap — only count laps from the second crossing on
+        if (car._startCrossed) car.lap++; else car._startCrossed = true;
+      } else if (car.lastS < this.track.total * 0.15 && cp.distAlong > this.track.total * 0.85) {
+        car.lap = Math.max(0, car.lap - 1);
+      }
     } else car._sInit = true;
     car.lastS = cp.distAlong;
     car.distAlong = cp.distAlong;
@@ -294,9 +309,23 @@ export class Game {
     const playerTime = this.player.finishTime;
     const top5 = this.state.top5;
     const qualifies = top5.length < 5 || playerTime < top5[top5.length - 1].time;
-    this.pendingStandings = standings.map((c, i) => ({ rank: i + 1, name: c.name, isPlayer: c.isPlayer, time: c.finished ? c.finishTime : null }));
+    const totalDist = LAPS * this.track.total;
+    this.pendingStandings = standings.map((c, i) => ({
+      rank: i + 1, name: c.name, isPlayer: c.isPlayer,
+      // the race ends the instant the player crosses the line, so any bot
+      // still out on track never gets an official finishTime — project one
+      // from its average pace so far rather than showing a blank dash,
+      // since the whole podium reads oddly with only some times filled in
+      time: c.finished ? c.finishTime : this.estimateFinishTime(c, totalDist),
+    }));
     this.setState({ screen: 'finished', standings: this.pendingStandings, playerTime, qualifies, saved: false });
     if (qualifies) setTimeout(() => this.ui.focusPseudoInput(), 150);
+  }
+
+  estimateFinishTime(car, totalDist) {
+    const avgSpeed = Math.max(car.progressTotal / Math.max(this.raceTime, 0.001), 1);
+    const remaining = Math.max(0, totalDist - car.progressTotal);
+    return this.raceTime + remaining / avgSpeed;
   }
 
   loop(now) {
