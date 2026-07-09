@@ -32,16 +32,19 @@ export const COLOR_SWATCHES = [
 
 // Bot skill presets. speedMul scales a bot's effective top speed against the
 // player's TUNING.maxSpeed; steerNoise adds heading jitter (imperfect line);
-// steerGain is how sharply a bot corrects toward its target point; cornerAggro
-// is how much of the corner-speed-trim (see ai.js) a bot actually commits to —
-// lower means it brakes earlier/harder for corners, higher means it carries
-// speed in deeper. lineSpread widens/narrows the random racing-line bias bots
-// get assigned each race (see Game#buildCars) — lower difficulties wander a
-// wider, sloppier range of lines.
+// steerGain is how sharply a bot corrects toward its target point.
+// cornerAggro feeds the corner-speed-trim (see ai.js) as `1 - curve*cornerAggro`
+// — so LOWER cornerAggro means LESS speed shaved off for a given corner, i.e.
+// a bot commits harder/brakes later. lineSpread widens/narrows the random
+// racing-line bias bots get assigned each race (see Game#buildCars) — lower
+// difficulties wander a wider, sloppier range of lines. hazardAware is a
+// qualitative (not just numeric) skill gap: only difficult bots actually
+// steer around a soap/oil slick when it's convenient to, rather than driving
+// through it blind.
 export const DIFFICULTIES = {
-  facile: { label: 'FACILE', speedMul: 0.88, steerNoise: 0.22, steerGain: 2.4, brakeSkill: 0.85, lineSpread: 1.1, cornerAggro: 0.55 },
-  normal: { label: 'NORMAL', speedMul: 1.0, steerNoise: 0.09, steerGain: 2.9, brakeSkill: 0.97, lineSpread: 0.85, cornerAggro: 0.42 },
-  difficile: { label: 'DIFFICILE', speedMul: 1.1, steerNoise: 0.02, steerGain: 3.3, brakeSkill: 1.0, lineSpread: 0.5, cornerAggro: 0.30 },
+  facile: { label: 'FACILE', speedMul: 0.90, steerNoise: 0.18, steerGain: 2.5, brakeSkill: 0.88, lineSpread: 1.05, cornerAggro: 0.50, hazardAware: false },
+  normal: { label: 'NORMAL', speedMul: 1.05, steerNoise: 0.07, steerGain: 3.0, brakeSkill: 0.98, lineSpread: 0.75, cornerAggro: 0.36, hazardAware: false },
+  difficile: { label: 'DIFFICILE', speedMul: 1.20, steerNoise: 0.01, steerGain: 3.6, brakeSkill: 1.0, lineSpread: 0.35, cornerAggro: 0.22, hazardAware: true },
 };
 
 export const LAPS = 3;
@@ -82,8 +85,11 @@ export const BOT_BIAS_BUCKETS = [[-0.55, -0.15], [-0.15, 0.15], [0.15, 0.55]];
 // matching entries here is the only step needed to switch a piece over to a
 // sprite later; no other code changes. Expected keys, for when that art shows
 // up: carBuggy, carFlash (cars — tinted at draw time by the player's chosen
-// color, see Renderer#drawTintedSprite); obsBlocks, obsBooks, obsMarble,
-// obsPencil, obsBigblock (obstacles); decorBed, decorToybox, decorLamp, decorRugpatch,
-// decorBall, decorBlockspair, decorSock, decorMarble (decor); surfOil,
-// surfHoney (hazard zones).
+// color, see Renderer#drawTintedSprite); bedroom obstacles: obsBlocks, obsBooks,
+// obsMarble, obsPencil, obsBigblock; bedroom decor: decorBed, decorToybox,
+// decorLamp, decorRugpatch, decorBall, decorBlockspair, decorSock, decorMarble;
+// kitchen obstacles: obsCapstack, obsPeas, obsSpoon, obsSponge, obsMatchbox;
+// kitchen decor: decorPlacemat, decorFruitbowl, decorMugsteam, decorFloormat,
+// decorApple, decorCappair, decorNapkin, decorOlive; hazard zones (both
+// circuits): surfOil, surfWater, surfHoney.
 export const SPRITE_MANIFEST = {};

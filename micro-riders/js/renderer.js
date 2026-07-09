@@ -11,6 +11,9 @@ import { SPRITE_MANIFEST, TUNING } from './config.js';
 
 const FLOOR_BASE = '#d8c39c';
 const FLOOR_PLANK = 'rgba(150,116,72,0.28)';
+const TILE_A = '#e7edf1';
+const TILE_B = '#d7e0e5';
+const TILE_GROUT = 'rgba(120,140,150,0.35)';
 const TRACK_FILL = '#8f8f96';
 const TRACK_EDGE = '#f4f1e8';
 const TRACK_CENTER = 'rgba(244,241,232,0.55)';
@@ -95,6 +98,11 @@ export class Renderer {
   worldT(ctx, cam, wx, wy) { ctx.translate(wx - cam.x, wy - cam.y); }
 
   floor(ctx, W, H, cam) {
+    if (this.game.track.floorTheme === 'tile') this.floorTile(ctx, W, H, cam);
+    else this.floorWood(ctx, W, H, cam);
+  }
+
+  floorWood(ctx, W, H, cam) {
     ctx.fillStyle = FLOOR_BASE;
     ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = FLOOR_PLANK; ctx.lineWidth = 2;
@@ -103,6 +111,27 @@ export class Renderer {
     ctx.beginPath();
     for (let x = -offX; x < W + tile; x += tile) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
     for (let y = -offY; y < H + tile * 3; y += tile * 3) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+
+  // kitchen circuit's "sol carrelé" — a checkerboard of square ceramic tiles
+  // (both axes gridded, unlike the wood floor's long planks) so the two
+  // circuits read as different rooms at a glance, not just a recolor.
+  floorTile(ctx, W, H, cam) {
+    const tile = 90;
+    const startCol = Math.floor(cam.x / tile), startRow = Math.floor(cam.y / tile);
+    const cols = Math.ceil(W / tile) + 2, rows = Math.ceil(H / tile) + 2;
+    for (let r = 0; r <= rows; r++) {
+      for (let c = 0; c <= cols; c++) {
+        const col = startCol + c, row = startRow + r;
+        ctx.fillStyle = (col + row) % 2 === 0 ? TILE_A : TILE_B;
+        ctx.fillRect(col * tile - cam.x, row * tile - cam.y, tile, tile);
+      }
+    }
+    ctx.strokeStyle = TILE_GROUT; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let c = 0; c <= cols; c++) { const x = (startCol + c) * tile - cam.x; ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let r = 0; r <= rows; r++) { const y = (startRow + r) * tile - cam.y; ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
   }
 
@@ -153,6 +182,7 @@ export class Renderer {
       if (s.x < cam.x - s.r - 40 || s.x > cam.x + W + s.r + 40 || s.y < cam.y - s.r - 40 || s.y > cam.y + H + s.r + 40) continue;
       ctx.save(); this.worldT(ctx, cam, s.x, s.y);
       if (s.type === 'oil') { if (!this.drawSprite(ctx, 'surfOil', s.r * 2)) this.drawOilSlick(ctx, s.r); }
+      else if (s.type === 'water') { if (!this.drawSprite(ctx, 'surfWater', s.r * 2)) this.drawWaterSpill(ctx, s.r); }
       else if (s.type === 'honey') { if (!this.drawSprite(ctx, 'surfHoney', s.r * 2)) this.drawHoneyPatch(ctx, s.r); }
       ctx.restore();
     }
@@ -169,6 +199,21 @@ export class Renderer {
       ctx.fillStyle = c;
       ctx.beginPath(); ctx.ellipse(-r * 0.15 + i * r * 0.12, -r * 0.1, r * (0.55 - i * 0.12), r * (0.32 - i * 0.07), 0.3, 0, Math.PI * 2); ctx.fill();
     });
+    ctx.restore();
+  }
+
+  // spilled water — same idea as the oil slick (near-zero grip) but a clear
+  // blue puddle rather than a dark rainbow-sheened one, so the two hazard
+  // types read apart at a glance despite the identical gameplay effect.
+  drawWaterSpill(ctx, r) {
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    const grad = ctx.createRadialGradient(-r * 0.2, -r * 0.2, 2, 0, 0, r);
+    grad.addColorStop(0, '#cdeeff'); grad.addColorStop(0.6, '#6bb8e6'); grad.addColorStop(1, 'rgba(50,110,150,0.55)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.2, -r * 0.15, r * 0.3, r * 0.16, 0.3, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
@@ -194,6 +239,11 @@ export class Renderer {
       else if (o.type === 'marbles') { ctx.restore(); this.drawMarbleCluster(ctx, cam, o); continue; }
       else if (o.type === 'pencil') { if (!this.drawSprite(ctx, 'obsPencil', o.len + 40)) this.drawPencil(ctx, o); }
       else if (o.type === 'bigblock') { if (!this.drawSprite(ctx, 'obsBigblock', 190)) this.drawBigBlock(ctx); }
+      else if (o.type === 'capstack') { if (!this.drawSprite(ctx, 'obsCapstack', 100)) this.drawCapStack(ctx); }
+      else if (o.type === 'peas') { ctx.restore(); this.drawPeaCluster(ctx, cam, o); continue; }
+      else if (o.type === 'spoon') { if (!this.drawSprite(ctx, 'obsSpoon', o.len + 40)) this.drawSpoon(ctx, o); }
+      else if (o.type === 'sponge') { if (!this.drawSprite(ctx, 'obsSponge', 96)) this.drawSponge(ctx); }
+      else if (o.type === 'matchbox') { if (!this.drawSprite(ctx, 'obsMatchbox', 190)) this.drawMatchbox(ctx); }
       ctx.restore();
     }
   }
@@ -286,6 +336,79 @@ export class Renderer {
     roundRectPath(ctx, -len / 2 - 12, -w / 2, 12, w, 3); ctx.fillStyle = '#ff7ac6'; ctx.fill();
   }
 
+  // Bottle-cap tower — kitchen's counterpart to the bedroom's block tower:
+  // small stacked discs (crimped-rim caps) instead of stacked cubes, same
+  // top-down-centered principle so the art sits inside the r=44 collider.
+  drawCapStack(ctx) {
+    shadowEllipse(ctx, 96, 96);
+    const colors = ['#c0c4c8', '#e6402c', '#f5c518'];
+    const sizes = [40, 30, 20];
+    const offs = [[-2, -2], [3, 3], [-2, 4]];
+    for (let i = 0; i < 3; i++) {
+      const s = sizes[i];
+      ctx.save(); ctx.translate(offs[i][0], offs[i][1]);
+      ctx.beginPath(); ctx.arc(0, 0, s / 2, 0, Math.PI * 2);
+      ctx.fillStyle = colors[i]; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, s / 2 - 4, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  drawPeaCluster(ctx, cam, o) {
+    o.colliders.forEach(c => {
+      ctx.save(); this.worldT(ctx, cam, c.x, c.y);
+      if (!this.drawSprite(ctx, 'obsPeas', c.r * 2)) {
+        shadowEllipse(ctx, c.r * 2.2, c.r * 1.4);
+        const grad = ctx.createRadialGradient(-c.r * 0.3, -c.r * 0.3, 1, 0, 0, c.r);
+        grad.addColorStop(0, '#a7e88a'); grad.addColorStop(0.35, '#4fa93a'); grad.addColorStop(1, 'rgba(0,0,0,0.35)');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
+
+  drawSpoon(ctx, o) {
+    ctx.rotate(o.angle);
+    const len = o.len, w = 16;
+    shadowEllipse(ctx, len * 1.1, 34);
+    roundRectPath(ctx, -len / 2, -w * 0.3, len * 0.72, w * 0.6, 4);
+    ctx.fillStyle = '#caa27a'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(len * 0.34, 0, 26, 17, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#d8b88a'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(len * 0.34, 0, 18, 11, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fill();
+  }
+
+  // Kitchen sponge — a squishy rounded rectangle rather than anything
+  // remotely fridge/oven-sized, per the miniature-car scale constraint.
+  drawSponge(ctx) {
+    shadowEllipse(ctx, 96, 96);
+    roundRectPath(ctx, -38, -26, 76, 52, 12);
+    ctx.fillStyle = '#f5d76e'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(190,140,20,0.35)';
+    for (const [px, py] of [[-14, -8], [6, 4], [-4, 10], [14, -6], [0, -14]]) { ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill(); }
+    roundRectPath(ctx, -38, 14, 76, 12, 6);
+    ctx.fillStyle = '#39c46b'; ctx.fill();
+  }
+
+  // Matchbox — kitchen's counterpart to the bedroom's toy-chest shortcut
+  // blocker, same oversized-and-centered role (squarely blocks the hook cut).
+  drawMatchbox(ctx) {
+    shadowEllipse(ctx, 190, 190);
+    const w = 130, h = 74;
+    roundRectPath(ctx, -w / 2, -h / 2, w, h, 8);
+    ctx.fillStyle = '#e6402c'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 3; ctx.stroke();
+    roundRectPath(ctx, -w / 2 + 10, -h / 2 + 10, w - 20, h - 20, 5);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; ctx.stroke();
+    roundRectPath(ctx, -w * 0.3, -h / 2 + 8, w * 0.22, h - 16, 3);
+    ctx.fillStyle = '#8a5a2c'; ctx.fill();
+  }
+
   // temporary verification aid — draws the actual physics collider shapes in
   // magenta so hitbox/art alignment can be checked visually; toggled via
   // window.__mrDebugColliders, not wired to any UI
@@ -321,6 +444,14 @@ export class Renderer {
       else if (d.type === 'blockspair') { if (!this.drawSprite(ctx, 'decorBlockspair', 90)) this.drawBlocksPair(ctx); }
       else if (d.type === 'sock') { if (!this.drawSprite(ctx, 'decorSock', 80)) this.drawSock(ctx); }
       else if (d.type === 'marble') { if (!this.drawSprite(ctx, 'decorMarble', 36)) this.drawSingleMarble(ctx); }
+      else if (d.type === 'placemat') { if (!this.drawSprite(ctx, 'decorPlacemat', 440)) this.drawPlacemat(ctx); }
+      else if (d.type === 'fruitbowl') { if (!this.drawSprite(ctx, 'decorFruitbowl', 172)) this.drawFruitbowl(ctx); }
+      else if (d.type === 'mugsteam') { if (!this.drawSprite(ctx, 'decorMugsteam', 90)) this.drawMugSteam(ctx); }
+      else if (d.type === 'floormat') { if (!this.drawSprite(ctx, 'decorFloormat', 300)) this.drawFloorMat(ctx); }
+      else if (d.type === 'apple') { if (!this.drawSprite(ctx, 'decorApple', 68)) this.drawApple(ctx); }
+      else if (d.type === 'cappair') { if (!this.drawSprite(ctx, 'decorCappair', 90)) this.drawCapPair(ctx); }
+      else if (d.type === 'napkin') { if (!this.drawSprite(ctx, 'decorNapkin', 80)) this.drawNapkin(ctx); }
+      else if (d.type === 'olive') { if (!this.drawSprite(ctx, 'decorOlive', 36)) this.drawOlive(ctx); }
       ctx.restore();
     }
   }
@@ -393,6 +524,85 @@ export class Renderer {
     const grad = ctx.createRadialGradient(-6, -6, 1, 0, 0, 18);
     grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.3, '#a855f7'); grad.addColorStop(1, 'rgba(0,0,0,0.3)');
     ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // kitchen decor — same cosmetic-only role and roughly matched footprints
+  // as their bedroom counterparts (placemat~bed, fruitbowl~toybox,
+  // mugsteam~lamp, floormat~rugpatch, apple~ball, cappair~blockspair,
+  // napkin~sock, olive~marble), sized for countertop/floor clutter rather
+  // than full appliances.
+  drawPlacemat(ctx) {
+    shadowEllipse(ctx, 460, 260);
+    roundRectPath(ctx, -220, -140, 440, 280, 20);
+    ctx.fillStyle = '#e0d6b8'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,90,50,0.25)'; ctx.lineWidth = 6;
+    ctx.beginPath();
+    for (let x = -190; x < 200; x += 30) { ctx.moveTo(x, -140); ctx.lineTo(x, 140); }
+    ctx.stroke();
+  }
+
+  drawFruitbowl(ctx) {
+    shadowEllipse(ctx, 170, 90);
+    ctx.beginPath(); ctx.ellipse(0, 10, 80, 36, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#d8dee3'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, -2, 68, 26, 0, Math.PI, Math.PI * 2);
+    ctx.fillStyle = '#eef2f4'; ctx.fill();
+    for (const [color, fx, fy, fr] of [['#e6402c', -24, -18, 20], ['#f5c518', 10, -24, 18], ['#39c46b', 26, -10, 16]]) {
+      ctx.beginPath(); ctx.arc(fx, fy, fr, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  }
+
+  drawMugSteam(ctx) {
+    ctx.save();
+    const grad = ctx.createRadialGradient(0, -30, 6, 0, -30, 90);
+    grad.addColorStop(0, 'rgba(255,255,255,0.4)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, -30, 90, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    shadowEllipse(ctx, 70, 34);
+    roundRectPath(ctx, -22, -30, 44, 44, 8);
+    ctx.fillStyle = '#2a9ee0'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(24, -8, 12, -Math.PI / 2, Math.PI / 2);
+    ctx.strokeStyle = '#2a9ee0'; ctx.lineWidth = 6; ctx.stroke();
+  }
+
+  drawFloorMat(ctx) {
+    ctx.fillStyle = 'rgba(80,110,130,0.18)';
+    roundRectPath(ctx, -150, -100, 300, 200, 30); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,110,130,0.3)'; ctx.lineWidth = 8;
+    roundRectPath(ctx, -120, -76, 240, 152, 24); ctx.stroke();
+  }
+
+  drawApple(ctx) {
+    shadowEllipse(ctx, 70, 34);
+    ctx.beginPath(); ctx.arc(0, 2, 32, 0, Math.PI * 2);
+    ctx.fillStyle = '#e6402c'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(-10, -8, 10, 16, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#39c46b'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(4, -42); ctx.stroke();
+    ctx.fillStyle = '#39c46b'; ctx.beginPath(); ctx.ellipse(10, -38, 10, 6, 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawCapPair(ctx) {
+    shadowEllipse(ctx, 90, 44);
+    ctx.save(); ctx.translate(-16, 0); ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = '#e6402c'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(20, 4); ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fillStyle = '#f5c518'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.stroke(); ctx.restore();
+  }
+
+  drawNapkin(ctx) {
+    shadowEllipse(ctx, 80, 34);
+    ctx.beginPath();
+    ctx.moveTo(-30, -20); ctx.lineTo(30, -20); ctx.lineTo(30, 20); ctx.lineTo(-30, 20); ctx.closePath();
+    ctx.fillStyle = '#f2f2f2'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-30, -20); ctx.lineTo(0, 10); ctx.lineTo(30, -20); ctx.stroke();
+    ctx.strokeStyle = '#2a9ee0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-26, 16); ctx.lineTo(26, 16); ctx.stroke();
+  }
+
+  drawOlive(ctx) {
+    shadowEllipse(ctx, 40, 20);
+    const grad = ctx.createRadialGradient(-4, -4, 1, 0, 0, 14);
+    grad.addColorStop(0, '#8bc46a'); grad.addColorStop(0.5, '#4b7a2f'); grad.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   // ---------- particles ----------

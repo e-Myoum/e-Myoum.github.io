@@ -19,15 +19,15 @@ const AVOID_WINDOW = 260;
 // side — and without any avoidance at all, a bot whose fixed racing-line
 // bias happens to point straight at a static prop has no way to ever divert
 // and stalls against it indefinitely.
-function findAvoidance(track, cp, lateralMax) {
+function findBandAvoidance(bands, totalLen, cp, lateralMax, window) {
   let best = null, bestDs = Infinity;
-  for (const band of track.obstacleBands) {
+  for (const band of bands) {
     // entirely outside the drivable band (e.g. the hairpin shortcut blockers,
     // deliberately placed off-track) — a bot driving normally never reaches
     // it, so it shouldn't trigger evasive steering just for passing nearby
     if (band.latMin > lateralMax || band.latMax < -lateralMax) continue;
-    let ds = band.s - cp.distAlong; if (ds < 0) ds += track.total;
-    if (ds < AVOID_WINDOW && ds < bestDs) { bestDs = ds; best = band; }
+    let ds = band.s - cp.distAlong; if (ds < 0) ds += totalLen;
+    if (ds < window && ds < bestDs) { bestDs = ds; best = band; }
   }
   if (!best) return null;
   const clear = TUNING.carRadius + 26;
@@ -36,7 +36,7 @@ function findAvoidance(track, cp, lateralMax) {
   const roomRight = lateralMax - latMax;     // space between the band and the outer edge
   let desiredLat = roomRight >= roomLeft ? latMax : latMin;
   desiredLat = Math.max(-lateralMax, Math.min(lateralMax, desiredLat));
-  return { lateral: desiredLat, urgency: 1 - bestDs / AVOID_WINDOW };
+  return { lateral: desiredLat, urgency: 1 - bestDs / window };
 }
 
 export function botInput(car, track, carModel, diffKey, bias, dt) {
@@ -54,9 +54,16 @@ export function botInput(car, track, carModel, diffKey, bias, dt) {
   car._biasWalk = Math.max(-0.4, Math.min(0.4, car._biasWalk));
   const effBias = Math.max(-1, Math.min(1, bias + car._biasWalk));
 
-  const avoid = findAvoidance(track, cp, lateralMax);
   const baseLat = effBias * lateralMax;
-  const targetLat = avoid ? baseLat + (avoid.lateral - baseLat) * avoid.urgency : baseLat;
+  const avoid = findBandAvoidance(track.obstacleBands, track.total, cp, lateralMax, AVOID_WINDOW);
+  let targetLat = avoid ? baseLat + (avoid.lateral - baseLat) * avoid.urgency : baseLat;
+  // only "hazard aware" difficulties bother routing around a soap/oil slick
+  // — and only when there's no solid obstacle already dictating the line,
+  // since a hard block always takes priority over an optional nudge
+  if (!avoid && diff.hazardAware) {
+    const hazard = findBandAvoidance(track.hazardBands, track.total, cp, lateralMax, AVOID_WINDOW * 0.85);
+    if (hazard) targetLat = baseLat + (hazard.lateral - baseLat) * Math.min(0.6, hazard.urgency);
+  }
 
   const p1 = track.pointAt(cp.distAlong + lookahead);
   const nx1 = -Math.sin(p1.heading), ny1 = Math.cos(p1.heading);
@@ -76,8 +83,8 @@ export function botInput(car, track, carModel, diffKey, bias, dt) {
   const targetSpeed = TUNING.maxSpeed * carModel.maxSpeedMul * diff.speedMul * jitter * speedFrac;
 
   let gas = false, brake = false;
-  if (car.speed < targetSpeed * 0.96) gas = true;
-  else if (car.speed > targetSpeed * 1.04) { if (Math.random() < diff.brakeSkill) brake = true; }
+  if (car.speed < targetSpeed * 0.985) gas = true;
+  else if (car.speed > targetSpeed * 1.015) { if (Math.random() < diff.brakeSkill) brake = true; }
 
   return { steer, gas, brake };
 }
