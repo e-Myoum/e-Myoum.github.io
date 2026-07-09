@@ -1,8 +1,14 @@
-// All canvas 2D drawing. Everything here is procedural vector art (no image
-// assets) — floor, track surface, toy-room obstacles/decor and the cars
-// themselves are all drawn with paths/gradients so cars can be recolored
-// freely and nothing needs an asset pipeline. Reads live state off `game`
+// All canvas 2D drawing. Everything here is procedural vector art for now (no
+// image assets yet) — floor, track surface, toy-room obstacles/decor and the
+// cars themselves are all drawn with paths/gradients. Every draw method below
+// checks `this.spr[key]` first and only falls back to the vector path if no
+// sprite loaded for that key — SPRITE_MANIFEST (config.js) is empty today, so
+// every draw currently takes the vector branch, but dropping art files in
+// assets/ plus an entry in the manifest is the only change needed later to
+// switch a piece over, no other code changes. Reads live state off `game`
 // each frame rather than owning a copy of it.
+import { SPRITE_MANIFEST, TUNING } from './config.js';
+
 const FLOOR_BASE = '#d8c39c';
 const FLOOR_PLANK = 'rgba(150,116,72,0.28)';
 const TRACK_FILL = '#8f8f96';
@@ -30,6 +36,45 @@ export class Renderer {
   constructor(game, ctx) {
     this.game = game;
     this.ctx = ctx;
+    this.spr = {};
+  }
+
+  loadSprites() {
+    for (const [key, file] of Object.entries(SPRITE_MANIFEST)) {
+      const img = new Image();
+      img.onload = () => { this.spr[key] = img; };
+      img.src = 'assets/' + file;
+    }
+  }
+
+  // draws `this.spr[key]` centered at the origin, sized to `w` wide (height
+  // kept proportional to the image), returning true — or returns false
+  // without drawing anything if that sprite hasn't loaded, so callers can
+  // fall through to their vector-art version.
+  drawSprite(ctx, key, w) {
+    const img = this.spr[key];
+    if (!img) return false;
+    const h = w * img.height / img.width;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    return true;
+  }
+
+  // same as drawSprite, but recolors the (presumably grayscale/white) sprite
+  // to the car's chosen color: multiply-tint, then clip back to the source
+  // image's alpha with destination-in so the background stays transparent.
+  drawTintedSprite(ctx, key, w, color) {
+    const img = this.spr[key];
+    if (!img) return false;
+    const h = w * img.height / img.width;
+    ctx.save();
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = color;
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    return true;
   }
 
   render() {
@@ -38,6 +83,7 @@ export class Renderer {
     this.floor(ctx, W, H, cam);
     this.trackSurface(ctx, cam);
     this.startLine(ctx, cam);
+    this.surfacesLayer(ctx, W, H, cam);
     this.decorLayer(ctx, W, H, cam);
     this.obstacleLayer(ctx, W, H, cam);
     this.particlesLayer(ctx, cam);
@@ -70,6 +116,8 @@ export class Renderer {
     // bright rim (full width) with the gray surface stroked slightly narrower
     // on top of it — centered on the same centerline, this just leaves a thin
     // rim visible on both edges without needing an offset-path computation.
+    // Purely a visual "stay on the road" guide now — the edge is no longer a
+    // hard wall, just where the off-track timer starts counting.
     ctx.strokeStyle = TRACK_EDGE; ctx.lineWidth = hw * 2;
     this._strokeLoop(ctx, pts);
     ctx.strokeStyle = TRACK_FILL; ctx.lineWidth = hw * 2 - 10;
@@ -91,11 +139,47 @@ export class Renderer {
   startLine(ctx, cam) {
     const track = this.game.track;
     const p0 = track.pointAt(0);
-    const nx = -Math.sin(p0.heading), ny = Math.cos(p0.heading);
     ctx.save(); this.worldT(ctx, cam, p0.x, p0.y); ctx.rotate(p0.heading);
     const hw = track.halfWidth;
     const squares = 10, sw = (hw * 2) / squares;
     for (let i = 0; i < squares; i++) { ctx.fillStyle = (i % 2) ? '#2b2b33' : '#f4f1e8'; ctx.fillRect(-6, -hw + i * sw, 12, sw); }
+    ctx.restore();
+  }
+
+  // ---------- hazard surfaces (non-collidable, modify handling) ----------
+  surfacesLayer(ctx, W, H, cam) {
+    for (const s of this.game.track.surfaces) {
+      if (s.x < cam.x - s.r - 40 || s.x > cam.x + W + s.r + 40 || s.y < cam.y - s.r - 40 || s.y > cam.y + H + s.r + 40) continue;
+      ctx.save(); this.worldT(ctx, cam, s.x, s.y);
+      if (s.type === 'oil') { if (!this.drawSprite(ctx, 'surfOil', s.r * 2)) this.drawOilSlick(ctx, s.r); }
+      else if (s.type === 'honey') { if (!this.drawSprite(ctx, 'surfHoney', s.r * 2)) this.drawHoneyPatch(ctx, s.r); }
+      ctx.restore();
+    }
+  }
+
+  drawOilSlick(ctx, r) {
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#2b2b33';
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    // faint rainbow sheen, the classic "oil puddle" tell
+    const bands = ['rgba(120,180,255,0.20)', 'rgba(160,120,255,0.16)', 'rgba(120,255,200,0.14)'];
+    bands.forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.ellipse(-r * 0.15 + i * r * 0.12, -r * 0.1, r * (0.55 - i * 0.12), r * (0.32 - i * 0.07), 0.3, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  drawHoneyPatch(ctx, r) {
+    ctx.save();
+    ctx.globalAlpha = 0.88;
+    const grad = ctx.createRadialGradient(-r * 0.2, -r * 0.2, 2, 0, 0, r);
+    grad.addColorStop(0, '#ffdb70'); grad.addColorStop(0.6, '#e8a94a'); grad.addColorStop(1, '#c9752b');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.25, -r * 0.18, r * 0.18, r * 0.09, 0.2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
@@ -104,10 +188,10 @@ export class Renderer {
     for (const o of this.game.track.obstacles) {
       if (o.x < cam.x - 260 || o.x > cam.x + W + 260 || o.y < cam.y - 260 || o.y > cam.y + H + 260) continue;
       ctx.save(); this.worldT(ctx, cam, o.x, o.y);
-      if (o.type === 'blocks') this.drawBlockTower(ctx);
-      else if (o.type === 'books') this.drawBookStack(ctx);
+      if (o.type === 'blocks') { if (!this.drawSprite(ctx, 'obsBlocks', 130)) this.drawBlockTower(ctx); }
+      else if (o.type === 'books') { if (!this.drawSprite(ctx, 'obsBooks', 120)) this.drawBookStack(ctx); }
       else if (o.type === 'marbles') { ctx.restore(); this.drawMarbleCluster(ctx, cam, o); continue; }
-      else if (o.type === 'pencil') this.drawPencil(ctx, o);
+      else if (o.type === 'pencil') { if (!this.drawSprite(ctx, 'obsPencil', o.len + 40)) this.drawPencil(ctx, o); }
       ctx.restore();
     }
   }
@@ -147,10 +231,12 @@ export class Renderer {
     const colors = ['#e6402c', '#2a9ee0', '#f5c518'];
     o.colliders.forEach((c, i) => {
       ctx.save(); this.worldT(ctx, cam, c.x, c.y);
-      shadowEllipse(ctx, c.r * 2.2, c.r * 1.4);
-      const grad = ctx.createRadialGradient(-c.r * 0.3, -c.r * 0.3, 1, 0, 0, c.r);
-      grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.25, colors[i % colors.length]); grad.addColorStop(1, 'rgba(0,0,0,0.35)');
-      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.fill();
+      if (!this.drawSprite(ctx, 'obsMarble', c.r * 2)) {
+        shadowEllipse(ctx, c.r * 2.2, c.r * 1.4);
+        const grad = ctx.createRadialGradient(-c.r * 0.3, -c.r * 0.3, 1, 0, 0, c.r);
+        grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.25, colors[i % colors.length]); grad.addColorStop(1, 'rgba(0,0,0,0.35)');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
     });
   }
@@ -175,14 +261,14 @@ export class Renderer {
     for (const d of this.game.track.decor) {
       if (d.x < cam.x - 320 || d.x > cam.x + W + 320 || d.y < cam.y - 320 || d.y > cam.y + H + 320) continue;
       ctx.save(); this.worldT(ctx, cam, d.x, d.y); ctx.scale(d.scale || 1, d.scale || 1);
-      if (d.type === 'bed') this.drawBed(ctx);
-      else if (d.type === 'toybox') this.drawToybox(ctx);
-      else if (d.type === 'lamp') this.drawLamp(ctx);
-      else if (d.type === 'rugpatch') this.drawRugPatch(ctx);
-      else if (d.type === 'ball') this.drawBall(ctx);
-      else if (d.type === 'blockspair') this.drawBlocksPair(ctx);
-      else if (d.type === 'sock') this.drawSock(ctx);
-      else if (d.type === 'marble') this.drawSingleMarble(ctx);
+      if (d.type === 'bed') { if (!this.drawSprite(ctx, 'decorBed', 440)) this.drawBed(ctx); }
+      else if (d.type === 'toybox') { if (!this.drawSprite(ctx, 'decorToybox', 172)) this.drawToybox(ctx); }
+      else if (d.type === 'lamp') { if (!this.drawSprite(ctx, 'decorLamp', 90)) this.drawLamp(ctx); }
+      else if (d.type === 'rugpatch') { if (!this.drawSprite(ctx, 'decorRugpatch', 300)) this.drawRugPatch(ctx); }
+      else if (d.type === 'ball') { if (!this.drawSprite(ctx, 'decorBall', 68)) this.drawBall(ctx); }
+      else if (d.type === 'blockspair') { if (!this.drawSprite(ctx, 'decorBlockspair', 90)) this.drawBlocksPair(ctx); }
+      else if (d.type === 'sock') { if (!this.drawSprite(ctx, 'decorSock', 80)) this.drawSock(ctx); }
+      else if (d.type === 'marble') { if (!this.drawSprite(ctx, 'decorMarble', 36)) this.drawSingleMarble(ctx); }
       ctx.restore();
     }
   }
@@ -260,8 +346,14 @@ export class Renderer {
   // ---------- particles ----------
   particlesLayer(ctx, cam) {
     for (const p of this.game.particles) {
-      ctx.globalAlpha = Math.max(0, p.life) * 0.5;
-      ctx.fillStyle = '#fff8e8';
+      const a = Math.max(0, p.life);
+      if (p.boom) {
+        ctx.globalAlpha = a;
+        ctx.fillStyle = a > 0.5 ? '#ffd27a' : '#ff6a3c';
+      } else {
+        ctx.globalAlpha = a * 0.5;
+        ctx.fillStyle = '#fff8e8';
+      }
       ctx.beginPath(); ctx.arc(p.x - cam.x, p.y - cam.y, p.r, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -269,7 +361,7 @@ export class Renderer {
 
   // ---------- cars ----------
   carsLayer(ctx, cam) {
-    const sorted = this.game.cars.slice().sort((a, b) => a.y - b.y);
+    const sorted = this.game.cars.filter(c => !c.exploding).sort((a, b) => a.y - b.y);
     for (const car of sorted) this.drawCar(ctx, cam, car);
   }
 
@@ -277,6 +369,16 @@ export class Renderer {
     ctx.save(); this.worldT(ctx, cam, car.x, car.y); ctx.rotate(car.heading);
     shadowEllipse(ctx, 52, 30);
     const len = car.carType === 'flash' ? 46 : 44, wid = car.carType === 'flash' ? 22 : 26;
+    const spriteKey = car.carType === 'flash' ? 'carFlash' : 'carBuggy';
+    // off-track warning: the car flashes once it's past half the explode
+    // timer, more urgently the closer it gets to actually blowing up
+    const offFrac = car.offTrackTime > 0 ? Math.min(1, car.offTrackTime / TUNING.offTrackLimit) : 0;
+    if (offFrac > 0.5 && Math.sin(performance.now() * 0.02) > 0) ctx.globalAlpha = 0.45;
+    if (this.drawTintedSprite(ctx, spriteKey, len, car.color)) {
+      if (car.isPlayer) this.drawHeadingArrow(ctx, len);
+      ctx.restore();
+      return;
+    }
     // wheels
     ctx.fillStyle = '#1c1c1c';
     const wOff = [[len * 0.30, wid * 0.5], [len * 0.30, -wid * 0.5], [-len * 0.30, wid * 0.5], [-len * 0.30, -wid * 0.5]];
@@ -305,10 +407,12 @@ export class Renderer {
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fillRect(-len * 0.42, -wid * 0.08, len * 0.3, wid * 0.16);
     ctx.restore();
-    if (car.isPlayer) {
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.moveTo(len / 2 + 4, 0); ctx.lineTo(len / 2 + 16, -6); ctx.lineTo(len / 2 + 16, 6); ctx.closePath(); ctx.fill();
-    }
+    if (car.isPlayer) this.drawHeadingArrow(ctx, len);
     ctx.restore();
+  }
+
+  drawHeadingArrow(ctx, len) {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(len / 2 + 4, 0); ctx.lineTo(len / 2 + 16, -6); ctx.lineTo(len / 2 + 16, 6); ctx.closePath(); ctx.fill();
   }
 }

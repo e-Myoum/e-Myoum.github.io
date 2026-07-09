@@ -37,12 +37,21 @@ function findAvoidance(track, cp, lateralMax) {
 
 export function botInput(car, track, carModel, diffKey, bias, dt) {
   const diff = DIFFICULTIES[diffKey] || DIFFICULTIES.normal;
+  const jitter = car._skillJitter || 1;
   const cp = track.closestPoint(car.x, car.y);
   const lookahead = 150 + Math.abs(car.speed) * 0.32;
   const lateralMax = track.halfWidth - TUNING.carRadius - 24;
 
+  // slow bounded wander on top of the race's randomly-assigned base bias (see
+  // Game#buildCars) — keeps a bot from driving the exact same line lap after
+  // lap or race after race. An AR(1) walk, not free-running noise, so it
+  // drifts but never runs away.
+  car._biasWalk = (car._biasWalk || 0) * 0.985 + (Math.random() - 0.5) * 0.02 * diff.lineSpread;
+  car._biasWalk = Math.max(-0.4, Math.min(0.4, car._biasWalk));
+  const effBias = Math.max(-1, Math.min(1, bias + car._biasWalk));
+
   const avoid = findAvoidance(track, cp, lateralMax);
-  const baseLat = bias * lateralMax;
+  const baseLat = effBias * lateralMax;
   const targetLat = avoid ? baseLat + (avoid.lateral - baseLat) * avoid.urgency : baseLat;
 
   const p1 = track.pointAt(cp.distAlong + lookahead);
@@ -54,17 +63,17 @@ export function botInput(car, track, carModel, diffKey, bias, dt) {
   const diffAngle = normAngle(desiredHeading - car.heading);
 
   car._aiNoise = (car._aiNoise || 0) * 0.9 + (Math.random() - 0.5) * diff.steerNoise * 1.4;
-  const steer = Math.max(-1, Math.min(1, diffAngle * diff.steerGain + car._aiNoise));
+  const steer = Math.max(-1, Math.min(1, diffAngle * diff.steerGain * jitter + car._aiNoise));
 
   // corner-speed trim: compare heading further out to gauge curvature ahead
   const p2 = track.pointAt(cp.distAlong + lookahead + 220);
   const curve = Math.abs(normAngle(p2.heading - p1.heading));
   const speedFrac = 1 - Math.min(1, curve / 1.1) * 0.55;
-  const targetSpeed = TUNING.maxSpeed * carModel.maxSpeedMul * diff.speedMul * speedFrac;
+  const targetSpeed = TUNING.maxSpeed * carModel.maxSpeedMul * diff.speedMul * jitter * speedFrac;
 
   let gas = false, brake = false;
   if (car.speed < targetSpeed * 0.96) gas = true;
-  else if (car.speed > targetSpeed * 1.04) { if (Math.random() < diff.brakeSkill) brake = true; }
+  else if (car.speed > targetSpeed * 1.04) { if (Math.random() < Math.min(1, diff.brakeSkill * jitter)) brake = true; }
 
   return { steer, gas, brake };
 }

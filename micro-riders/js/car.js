@@ -3,13 +3,17 @@ import { TUNING } from './config.js';
 // One car's kinematic state. `speed` is the signed forward speed (negative =
 // reversing); `vx`/`vy` is the actual velocity vector, which only chases the
 // heading-aligned vector at a finite rate (TUNING.grip) — that lag is what
-// gives corners a little slide instead of feeling like it's on rails.
+// gives corners a slide instead of feeling like it's on rails. `surfaceGrip`/
+// `surfaceDrag` are set every frame by Game#applySurfaces from whatever hazard
+// zone (if any) the car is currently over.
 export function makeCar({ x, y, heading, carType, color, isPlayer, name }) {
   return {
     x, y, heading, carType, color, isPlayer, name,
     speed: 0, vx: 0, vy: 0,
     lap: 0, distAlong: 0, lastS: 0, finished: false, finishTime: 0,
     rank: 1, skidAmt: 0,
+    offTrackTime: 0, exploding: false, explodeT: 0,
+    surfaceGrip: 1, surfaceDrag: 0, surfaceSpeedCap: Infinity, onOil: false,
   };
 }
 
@@ -33,6 +37,20 @@ export function stepCar(car, input, dt, carModel) {
   }
   car.speed = Math.max(-maxRev, Math.min(maxSpeed, car.speed));
 
+  // honey patch: a mild sticky drag (direction-aware, so it saps speed rather
+  // than snapping to a stop) plus a hard speed cap. The cap — not the drag —
+  // is what actually makes honey feel "stuck slow": the drag alone must stay
+  // weaker than every car's acceleration, or a car that fully stops on the
+  // patch could never move again (net force can't go positive from a
+  // standstill). The cap has no such trap since it only ever limits speed,
+  // never opposes the motion that's building toward it.
+  if (car.surfaceDrag) {
+    const d = car.surfaceDrag * dt;
+    if (car.speed > 0) car.speed = Math.max(0, car.speed - d);
+    else car.speed = Math.min(0, car.speed + d);
+  }
+  car.speed = Math.max(-car.surfaceSpeedCap, Math.min(car.surfaceSpeedCap, car.speed));
+
   // steering authority ramps up with speed (near-stationary cars barely pivot)
   const speedFrac = Math.min(1, Math.abs(car.speed) / maxSpeed);
   const turnAuthority = t.turnRateLowSpeedFloor + (1 - t.turnRateLowSpeedFloor) * speedFrac;
@@ -41,7 +59,10 @@ export function stepCar(car, input, dt, carModel) {
 
   const hx = Math.cos(car.heading), hy = Math.sin(car.heading);
   const targetVx = hx * car.speed, targetVy = hy * car.speed;
-  const grip = t.grip * carModel.gripMul;
+  // grip drops the harder you steer at speed (the tail steps out mid-corner)
+  // and drops hard on a soap/oil slick — both funnel through the same knob
+  const slipPenalty = 1 - t.gripSlipSteer * Math.abs(input.steer) * speedFrac;
+  const grip = t.grip * carModel.gripMul * Math.max(0.15, slipPenalty) * car.surfaceGrip;
   const lerp = Math.min(1, grip * dt);
   car.vx += (targetVx - car.vx) * lerp;
   car.vy += (targetVy - car.vy) * lerp;

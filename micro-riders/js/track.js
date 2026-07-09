@@ -1,15 +1,71 @@
-// The circuit is a rounded-rectangle "stadium" loop (two straights, two long
-// straights, four quarter-circle corners) — smooth, self-intersection-free,
-// and cheap to reason about for both wall collision and AI lookahead. The
-// "chambre d'enfant" theming comes entirely from obstacles/decor placed on
-// top of that geometry, not from deforming the racing line itself: a couple
-// of toys jut in from the track edges to force weaving, while everything
-// else is pure set-dressing scattered around the loop.
-export const STADIUM = { a: 850, b: 550, R: 260, margin: 220 };
-export const TRACK_WIDTH = 300;
+// The circuit is built by walking a sequence of straight/arc "turtle" moves —
+// far more flexible than a fixed rounded-rectangle, and closure is free: any
+// move sequence whose net heading change is exactly 180° closes into a full
+// loop when run twice in a row (the second run is the point-symmetric mirror
+// of the first, so the total displacement cancels automatically). That's the
+// only constraint move lists below have to satisfy.
+export const TRACK_WIDTH = 220;
 
 const STEP_LINEAR = 20;
 const STEP_ANGLE_DEG = 6;
+
+// One half of the lap: a long straight into an S-chicane, another straight
+// into a wide sweeping corner, a straight into a tight hook-shaped hairpin —
+// net heading change is exactly 180° (30-60-30 chicane nets 0, the sweep
+// nets 90, the hairpin's 135/-45 hook nets 90). Run twice, this closes into
+// a self-intersection-free lap (verified offline) with a noticeably
+// different feel corner to corner instead of a uniform oval.
+const HALF_MOVES = [
+  { straight: 420 },
+  { arc: { radius: 190, angle: -30 } }, { straight: 70 }, { arc: { radius: 190, angle: 60 } }, { straight: 70 }, { arc: { radius: 190, angle: -30 } },
+  { straight: 260 },
+  { arc: { radius: 260, angle: 90 } },
+  { straight: 240 },
+  { arc: { radius: 160, angle: 135 } }, { straight: 40 }, { arc: { radius: 160, angle: -45 } },
+];
+
+function buildTurtlePath(moves) {
+  let x = 0, y = 0, heading = 0;
+  const pts = [{ x, y }];
+  for (const m of moves) {
+    if (m.straight != null) {
+      const n = Math.max(1, Math.round(m.straight / STEP_LINEAR));
+      const stepLen = m.straight / n;
+      for (let i = 0; i < n; i++) { x += Math.cos(heading) * stepLen; y += Math.sin(heading) * stepLen; pts.push({ x, y }); }
+    } else if (m.arc) {
+      const angleRad = m.arc.angle * Math.PI / 180;
+      const sign = angleRad >= 0 ? 1 : -1;
+      const r = m.arc.radius;
+      const cx = x + r * sign * Math.cos(heading + Math.PI / 2);
+      const cy = y + r * sign * Math.sin(heading + Math.PI / 2);
+      const n = Math.max(1, Math.ceil(Math.abs(m.arc.angle) / STEP_ANGLE_DEG));
+      for (let i = 1; i <= n; i++) {
+        const t = i / n;
+        const th = heading + angleRad * t;
+        x = cx - r * sign * Math.cos(th + Math.PI / 2);
+        y = cy - r * sign * Math.sin(th + Math.PI / 2);
+        pts.push({ x, y });
+      }
+      heading += angleRad;
+    }
+  }
+  return pts;
+}
+
+function buildCenterline() {
+  const pts = buildTurtlePath(HALF_MOVES.concat(HALF_MOVES));
+  // the walk closes back onto its own start point — drop the near-duplicate
+  // last sample so the loop doesn't have a zero-length closing segment
+  const first = pts[0], last = pts[pts.length - 1];
+  if (Math.hypot(last.x - first.x, last.y - first.y) < 1) pts.pop();
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
+  const margin = 220;
+  const offX = margin - minX, offY = margin - minY;
+  for (const p of pts) { p.x += offX; p.y += offY; }
+  return { pts, worldW: maxX - minX + margin * 2, worldH: maxY - minY + margin * 2 };
+}
 
 // Reduces either collider shape to "the nearest point on it, plus its radius"
 // so every consumer (physics, AI band projection) can treat a circle and a
@@ -36,39 +92,22 @@ function colliderSamples(c) {
   return c.x1 !== undefined ? [{ x: c.x1, y: c.y1, r: c.r }, { x: c.x2, y: c.y2, r: c.r }] : [{ x: c.x, y: c.y, r: c.r }];
 }
 
-function buildCenterline() {
-  const { a, b, R } = STADIUM;
-  const pts = [];
-  const push = (x, y) => pts.push({ x, y });
-
-  for (let x = -(a - R); x < a - R; x += STEP_LINEAR) push(x, -b);                    // top straight, L->R
-  for (let d = -90; d < 0; d += STEP_ANGLE_DEG) { const r = d * Math.PI / 180; push(a - R + R * Math.cos(r), -(b - R) + R * Math.sin(r)); } // TR corner
-  for (let y = -(b - R); y < b - R; y += STEP_LINEAR) push(a, y);                     // right straight, T->B
-  for (let d = 0; d < 90; d += STEP_ANGLE_DEG) { const r = d * Math.PI / 180; push(a - R + R * Math.cos(r), b - R + R * Math.sin(r)); }  // BR corner
-  for (let x = a - R; x > -(a - R); x -= STEP_LINEAR) push(x, b);                     // bottom straight, R->L
-  for (let d = 90; d < 180; d += STEP_ANGLE_DEG) { const r = d * Math.PI / 180; push(-(a - R) + R * Math.cos(r), b - R + R * Math.sin(r)); } // BL corner
-  for (let y = b - R; y > -(b - R); y -= STEP_LINEAR) push(-a, y);                    // left straight, B->T
-  for (let d = 180; d < 270; d += STEP_ANGLE_DEG) { const r = d * Math.PI / 180; push(-(a - R) + R * Math.cos(r), -(b - R) + R * Math.sin(r)); } // TL corner
-
-  const offX = a + STADIUM.margin, offY = b + STADIUM.margin;
-  for (const p of pts) { p.x += offX; p.y += offY; }
-  return pts;
-}
-
 export class Track {
   constructor() {
-    this.points = buildCenterline();
+    const built = buildCenterline();
+    this.points = built.pts;
+    this.worldW = built.worldW;
+    this.worldH = built.worldH;
     const n = this.points.length;
     this.s = new Array(n);
     this.s[0] = 0;
     for (let i = 1; i < n; i++) this.s[i] = this.s[i - 1] + this._dist(i - 1, i);
-    this.total = this.s[n - 1] + this._distWrap(n - 1, 0);
+    this.total = this.s[n - 1] + this._dist(n - 1, 0);
     this.halfWidth = TRACK_WIDTH / 2;
-    this.worldW = 2 * STADIUM.a + 2 * STADIUM.margin;
-    this.worldH = 2 * STADIUM.b + 2 * STADIUM.margin;
     this.center = { x: this.worldW / 2, y: this.worldH / 2 };
     this.obstacles = this._buildObstacles();
     this.decor = this._buildDecor();
+    this.surfaces = this._buildSurfaces();
     // per-obstacle lateral "band" (min/max lateral reach across all its
     // colliders, plus its arc-length position), pre-projected once up front.
     // The AI treats each obstacle as one blocked band rather than reasoning
@@ -90,7 +129,6 @@ export class Track {
   }
 
   _dist(i, j) { const a = this.points[i], b = this.points[j]; return Math.hypot(b.x - a.x, b.y - a.y); }
-  _distWrap(i, j) { return this._dist(i, j); }
 
   // nearest point on the centerline to (x,y): returns arc-length position,
   // signed lateral offset (+ = one side, - = the other, consistent all the
@@ -131,79 +169,75 @@ export class Track {
     return { x: p0.x + dx * t, y: p0.y + dy * t, heading: Math.atan2(dy, dx) };
   }
 
+  // world position at a given arc-length + signed lateral offset from the centerline
+  offsetPoint(dist, lateral) {
+    const p = this.pointAt(dist);
+    const nx = -Math.sin(p.heading), ny = Math.cos(p.heading);
+    return { x: p.x + nx * lateral, y: p.y + ny * lateral, heading: p.heading };
+  }
+
   // starting-grid slot (2x2), staggered behind the line, facing the track heading
   gridSlot(index) {
     const row = Math.floor(index / 2), lane = index % 2;
-    const dist = -(60 + row * 78);
-    const base = this.pointAt(dist);
-    const nx = -Math.sin(base.heading), ny = Math.cos(base.heading);
-    const lateral = lane === 0 ? -62 : 62;
-    return { x: base.x + nx * lateral, y: base.y + ny * lateral, heading: base.heading };
-  }
-
-  // pushes (x,y) back inside the drivable band if it strayed past either edge;
-  // returns null when no correction was needed.
-  wallCorrection(x, y, radius) {
-    const cp = this.closestPoint(x, y);
-    const limit = this.halfWidth - radius;
-    if (cp.lateral > limit) {
-      const over = cp.lateral - limit;
-      const nx = -Math.sin(cp.heading), ny = Math.cos(cp.heading);
-      return { x: x - nx * over, y: y - ny * over, nx: -nx, ny: -ny };
-    }
-    if (cp.lateral < -limit) {
-      const over = -limit - cp.lateral;
-      const nx = -Math.sin(cp.heading), ny = Math.cos(cp.heading);
-      return { x: x + nx * over, y: y + ny * over, nx, ny };
-    }
-    return null;
+    return this.offsetPoint(-(60 + row * 78), lane === 0 ? -46 : 46);
   }
 
   _buildObstacles() {
-    const { a, b, R, margin } = STADIUM;
-    const offX = a + margin, offY = b + margin;
+    const T = this.total;
     const list = [];
-    // block tower — juts in from the inner edge of the right straight
-    list.push({ type: 'blocks', x: offX + a - 62, y: offY, colliders: [{ x: offX + a - 62, y: offY, r: 68 }] });
-    // book stack — juts in from the outer edge of the bottom straight
-    list.push({ type: 'books', x: offX, y: offY + b + 70, colliders: [{ x: offX, y: offY + b + 70, r: 62 }] });
-    // spilled marbles — small cluster near the end of the top straight, spaced
-    // wide enough apart (surface-to-surface gap > 2x car radius) that a car
-    // can actually thread between individual marbles instead of just bouncing
-    // off the cluster as a whole
-    list.push({
-      type: 'marbles',
-      x: offX + a - 590 + 150, y: offY - b,
-      colliders: [
-        { x: offX + a - 590 + 90, y: offY - b - 10, r: 15 },
-        { x: offX + a - 590 + 160, y: offY - b + 14, r: 15 },
-        { x: offX + a - 590 + 228, y: offY - b - 12, r: 15 },
-      ],
-    });
-    // pencil, laid diagonally across part of the left straight — a single
+    // block tower — juts in from one edge of the second straight (post-chicane)
+    { const p = this.offsetPoint(T * 0.226, this.halfWidth * 0.62); list.push({ type: 'blocks', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 46 }] }); }
+    // book stack — juts in from the outer edge near the wide sweeping corner
+    { const p = this.offsetPoint(T * 0.30, -this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 42 }] }); }
+    // spilled marbles — small cluster before the hairpin, spaced wide enough
+    // (surface gap > 2x car radius) that a car can thread between them
+    {
+      const p1 = this.offsetPoint(T * 0.36, -12), p2 = this.offsetPoint(T * 0.372, 22), p3 = this.offsetPoint(T * 0.385, -18);
+      list.push({ type: 'marbles', x: p2.x, y: p2.y, colliders: [{ x: p1.x, y: p1.y, r: 15 }, { x: p2.x, y: p2.y, r: 15 }, { x: p3.x, y: p3.y, r: 15 }] });
+    }
+    // pencil, laid diagonally across the straight after the hairpin — a single
     // capsule (not a chain of circles) so there's no notch a car could wedge
     // itself into between adjacent sub-colliders
     {
-      const cx = offX - a, cy = offY, ang = 0.62, len = 150, halfLen = len * 0.42;
-      const x1 = cx - Math.cos(ang) * halfLen, y1 = cy - Math.sin(ang) * halfLen;
-      const x2 = cx + Math.cos(ang) * halfLen, y2 = cy + Math.sin(ang) * halfLen;
-      list.push({ type: 'pencil', x: cx, y: cy, angle: ang, len, colliders: [{ x1, y1, x2, y2, r: 13 }] });
+      const c = this.offsetPoint(T * 0.56, 0);
+      const ang = c.heading + 0.6, halfLen = 63;
+      const x1 = c.x - Math.cos(ang) * halfLen, y1 = c.y - Math.sin(ang) * halfLen;
+      const x2 = c.x + Math.cos(ang) * halfLen, y2 = c.y + Math.sin(ang) * halfLen;
+      list.push({ type: 'pencil', x: c.x, y: c.y, angle: ang, len: 150, colliders: [{ x1, y1, x2, y2, r: 13 }] });
     }
+    // second-half variety: another block tower and book stack, offset to the
+    // opposite side of the track from their first-half counterparts
+    { const p = this.offsetPoint(T * 0.726, -this.halfWidth * 0.6); list.push({ type: 'blocks', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 46 }] }); }
+    { const p = this.offsetPoint(T * 0.83, this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 42 }] }); }
+    return list;
+  }
+
+  // non-collidable zones that modify a car's handling while it's inside them
+  // (see game.js#applySurfaces) rather than blocking it — the slick/sticky
+  // spots the difficulty comes from, not solid geometry.
+  _buildSurfaces() {
+    const T = this.total;
+    const list = [];
+    // soap/oil slicks right in the two chicanes — exactly where losing grip hurts most
+    { const p = this.offsetPoint(T * 0.143, 0); list.push({ type: 'oil', x: p.x, y: p.y, r: 70 }); }
+    { const p = this.offsetPoint(0.5 * T + T * 0.143, 0); list.push({ type: 'oil', x: p.x, y: p.y, r: 70 }); }
+    // honey patches on the straights after the wide corners — sticky, saps speed
+    { const p = this.offsetPoint(T * 0.363, this.halfWidth * 0.4); list.push({ type: 'honey', x: p.x, y: p.y, r: 62 }); }
+    { const p = this.offsetPoint(T * 0.879, -this.halfWidth * 0.4); list.push({ type: 'honey', x: p.x, y: p.y, r: 62 }); }
     return list;
   }
 
   _buildDecor() {
-    const { a, b, margin } = STADIUM;
-    const offX = a + margin, offY = b + margin;
+    const w = this.worldW, h = this.worldH;
     return [
-      { type: 'bed', x: offX, y: offY, scale: 1 },
-      { type: 'toybox', x: offX - a - margin * 0.55, y: offY + b + margin * 0.4, scale: 1 },
-      { type: 'lamp', x: offX + a + margin * 0.6, y: offY - b - margin * 0.45, scale: 1 },
-      { type: 'rugpatch', x: offX - a - margin * 0.4, y: offY - b - margin * 0.3, scale: 1.1 },
-      { type: 'ball', x: offX + a + margin * 0.55, y: offY + b + margin * 0.35, scale: 1 },
-      { type: 'blockspair', x: offX - a * 0.35, y: offY + b + margin * 0.55, scale: 1 },
-      { type: 'sock', x: offX + a * 0.4, y: offY - b - margin * 0.4, scale: 1 },
-      { type: 'marble', x: offX - a + margin * 0.2, y: offY - b * 0.15, scale: 1 },
+      { type: 'bed', x: w * 0.5, y: h * 0.46, scale: 1 },
+      { type: 'toybox', x: w * 0.08, y: h * 0.85, scale: 1 },
+      { type: 'lamp', x: w * 0.93, y: h * 0.1, scale: 1 },
+      { type: 'rugpatch', x: w * 0.1, y: h * 0.12, scale: 1.1 },
+      { type: 'ball', x: w * 0.92, y: h * 0.88, scale: 1 },
+      { type: 'blockspair', x: w * 0.3, y: h * 0.9, scale: 1 },
+      { type: 'sock', x: w * 0.7, y: h * 0.08, scale: 1 },
+      { type: 'marble', x: w * 0.03, y: h * 0.5, scale: 1 },
     ];
   }
 }
