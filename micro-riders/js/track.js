@@ -14,15 +14,26 @@ const STEP_ANGLE_DEG = 6;
 // net heading change is exactly 180° (30-60-30 chicane nets 0, the sweep
 // nets 90, the hairpin's 135/-45 hook nets 90). Run twice, this closes into
 // a self-intersection-free lap (verified offline) with a noticeably
-// different feel corner to corner instead of a uniform oval.
+// different feel corner to corner instead of a uniform oval. Scaled up ~1.4x
+// from the original draft — a uniform scale changes no angles, so closure is
+// still exact — both to make the lap longer and so cutting a corner saves
+// less distance in proportion to the whole lap.
+const SCALE = 1.4;
 const HALF_MOVES = [
-  { straight: 420 },
-  { arc: { radius: 190, angle: -30 } }, { straight: 70 }, { arc: { radius: 190, angle: 60 } }, { straight: 70 }, { arc: { radius: 190, angle: -30 } },
-  { straight: 260 },
-  { arc: { radius: 260, angle: 90 } },
-  { straight: 240 },
-  { arc: { radius: 160, angle: 135 } }, { straight: 40 }, { arc: { radius: 160, angle: -45 } },
+  { straight: 420 * SCALE },
+  { arc: { radius: 190 * SCALE, angle: -30 } }, { straight: 70 * SCALE }, { arc: { radius: 190 * SCALE, angle: 60 } }, { straight: 70 * SCALE }, { arc: { radius: 190 * SCALE, angle: -30 } },
+  { straight: 260 * SCALE },
+  { arc: { radius: 260 * SCALE, angle: 90 } },
+  { straight: 240 * SCALE },
+  { arc: { radius: 160 * SCALE, angle: 135 } }, { straight: 40 * SCALE }, { arc: { radius: 160 * SCALE, angle: -45 } },
 ];
+// The hairpin (last 3 moves above) is the one feature sharp enough that a
+// straight-line "beeline" through its inside saves real distance versus
+// following the curve — see below (`hairpinBlockerLocal`) for how that's
+// physically blocked rather than just discouraged.
+const HAIRPIN_MOVES = HALF_MOVES.slice(-3);
+
+function moveLength(m) { return m.straight != null ? m.straight : Math.abs(m.arc.angle) * Math.PI / 180 * m.arc.radius; }
 
 function buildTurtlePath(moves) {
   let x = 0, y = 0, heading = 0;
@@ -50,6 +61,22 @@ function buildTurtlePath(moves) {
     }
   }
   return pts;
+}
+
+// local-frame (hairpin entry heading = 0, entry position = origin) midpoint
+// of the straight-line "beeline" across the hairpin — the point a car
+// cutting straight through the hairpin's inside instead of following the
+// curve would pass closest to. A sharp hairpin's chord is meaningfully
+// shorter than its arc (for this one: ~140 units over a ~545-unit feature),
+// so without something solid actually in the way there, a car that ignores
+// the curve entirely is *faster* even after the off-track speed penalty —
+// see Track#_buildObstacles for how this gets a "bigblock" placed on it.
+const HAIRPIN_START_S = HALF_MOVES.slice(0, -3).reduce((s, m) => s + moveLength(m), 0);
+const HALF_LENGTH = HALF_MOVES.reduce((s, m) => s + moveLength(m), 0);
+function hairpinChordMidpointLocal() {
+  const pts = buildTurtlePath(HAIRPIN_MOVES);
+  const p0 = pts[0], p1 = pts[pts.length - 1];
+  return { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
 }
 
 function buildCenterline() {
@@ -188,7 +215,7 @@ export class Track {
     // block tower — juts in from one edge of the second straight (post-chicane)
     { const p = this.offsetPoint(T * 0.226, this.halfWidth * 0.62); list.push({ type: 'blocks', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 46 }] }); }
     // book stack — juts in from the outer edge near the wide sweeping corner
-    { const p = this.offsetPoint(T * 0.30, -this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 42 }] }); }
+    { const p = this.offsetPoint(T * 0.30, -this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 44 }] }); }
     // spilled marbles — small cluster before the hairpin, spaced wide enough
     // (surface gap > 2x car radius) that a car can thread between them
     {
@@ -200,7 +227,7 @@ export class Track {
     // itself into between adjacent sub-colliders
     {
       const c = this.offsetPoint(T * 0.56, 0);
-      const ang = c.heading + 0.6, halfLen = 63;
+      const ang = c.heading + 0.6, halfLen = 76;
       const x1 = c.x - Math.cos(ang) * halfLen, y1 = c.y - Math.sin(ang) * halfLen;
       const x2 = c.x + Math.cos(ang) * halfLen, y2 = c.y + Math.sin(ang) * halfLen;
       list.push({ type: 'pencil', x: c.x, y: c.y, angle: ang, len: 150, colliders: [{ x1, y1, x2, y2, r: 13 }] });
@@ -208,7 +235,19 @@ export class Track {
     // second-half variety: another block tower and book stack, offset to the
     // opposite side of the track from their first-half counterparts
     { const p = this.offsetPoint(T * 0.726, -this.halfWidth * 0.6); list.push({ type: 'blocks', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 46 }] }); }
-    { const p = this.offsetPoint(T * 0.83, this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 42 }] }); }
+    { const p = this.offsetPoint(T * 0.83, this.halfWidth * 0.6); list.push({ type: 'books', x: p.x, y: p.y, colliders: [{ x: p.x, y: p.y, r: 44 }] }); }
+    // a big toy chest sitting squarely on the straight-line shortcut across
+    // each hairpin (both occurrences) — physically blocks the cut instead of
+    // just discouraging it, see hairpinChordMidpointLocal() above
+    const localMid = hairpinChordMidpointLocal();
+    for (let k = 0; k < 2; k++) {
+      const sStart = k * HALF_LENGTH + HAIRPIN_START_S;
+      const entry = this.pointAt(sStart);
+      const H = entry.heading;
+      const wx = entry.x + localMid.x * Math.cos(H) - localMid.y * Math.sin(H);
+      const wy = entry.y + localMid.x * Math.sin(H) + localMid.y * Math.cos(H);
+      list.push({ type: 'bigblock', x: wx, y: wy, colliders: [{ x: wx, y: wy, r: 95 }] });
+    }
     return list;
   }
 

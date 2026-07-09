@@ -27,13 +27,16 @@ export const COLOR_SWATCHES = [
 
 // Bot skill presets. speedMul scales a bot's effective top speed against the
 // player's TUNING.maxSpeed; steerNoise adds heading jitter (imperfect line);
-// steerGain is how sharply a bot corrects toward its target point. lineSpread
-// widens/narrows the random racing-line bias bots get assigned each race (see
-// Game#buildCars) — lower difficulties wander a wider, sloppier range of lines.
+// steerGain is how sharply a bot corrects toward its target point; cornerAggro
+// is how much of the corner-speed-trim (see ai.js) a bot actually commits to —
+// lower means it brakes earlier/harder for corners, higher means it carries
+// speed in deeper. lineSpread widens/narrows the random racing-line bias bots
+// get assigned each race (see Game#buildCars) — lower difficulties wander a
+// wider, sloppier range of lines.
 export const DIFFICULTIES = {
-  facile: { label: 'FACILE', speedMul: 0.72, steerNoise: 0.34, steerGain: 2.0, brakeSkill: 0.6, lineSpread: 1.3 },
-  normal: { label: 'NORMAL', speedMul: 0.86, steerNoise: 0.15, steerGain: 2.4, brakeSkill: 0.8, lineSpread: 1.0 },
-  difficile: { label: 'DIFFICILE', speedMul: 1.0, steerNoise: 0.05, steerGain: 2.85, brakeSkill: 1.0, lineSpread: 0.7 },
+  facile: { label: 'FACILE', speedMul: 0.80, steerNoise: 0.28, steerGain: 2.2, brakeSkill: 0.7, lineSpread: 1.2, cornerAggro: 0.62 },
+  normal: { label: 'NORMAL', speedMul: 0.95, steerNoise: 0.12, steerGain: 2.7, brakeSkill: 0.92, lineSpread: 0.95, cornerAggro: 0.48 },
+  difficile: { label: 'DIFFICILE', speedMul: 1.05, steerNoise: 0.03, steerGain: 3.1, brakeSkill: 1.0, lineSpread: 0.6, cornerAggro: 0.35 },
 };
 
 export const LAPS = 3;
@@ -53,8 +56,10 @@ export const TUNING = {
   obstacleBounce: 0.4,
   carCarRestitution: 0.55, // "bounciness" of car-vs-car hits — impulse scales with closing speed, so a graze stays soft and a T-bone throws both cars hard
   carCarImpulseCap: 900,
-  offTrackLimit: 3.0,    // seconds fully off the drivable band before a car explodes
+  offTrackLimit: 2.2,    // seconds fully off the drivable band before a car explodes
   respawnDelay: 1.1,     // seconds frozen (exploded) before respawning back on track
+  offTrackGripMul: 0.5,  // grip multiplier off the drivable band — grass/floor-edge traction loss, not just a timer
+  offTrackSpeedCapFrac: 0.55, // fraction of top speed a car is capped to off-track — makes cutting a corner reliably slower than staying on the tarmac
   oilGripMul: 0.16,      // grip multiplier while on a soap/oil slick — the car barely bites, mostly slides
   honeyDrag: 220,        // extra deceleration (u/s^2) while on a honey patch — must stay below the weakest car's accel or a car that stops on it can never move again
   honeySpeedCapFrac: 0.35, // fraction of top speed a car is capped to while on honey — this (not the drag) is what makes it feel "stuck slow", so it never fights to a standstill
@@ -73,7 +78,7 @@ export const BOT_BIAS_BUCKETS = [[-0.55, -0.15], [-0.15, 0.15], [0.15, 0.55]];
 // sprite later; no other code changes. Expected keys, for when that art shows
 // up: carBuggy, carFlash (cars — tinted at draw time by the player's chosen
 // color, see Renderer#drawTintedSprite); obsBlocks, obsBooks, obsMarble,
-// obsPencil (obstacles); decorBed, decorToybox, decorLamp, decorRugpatch,
+// obsPencil, obsBigblock (obstacles); decorBed, decorToybox, decorLamp, decorRugpatch,
 // decorBall, decorBlockspair, decorSock, decorMarble (decor); surfOil,
 // surfHoney (hazard zones).
 export const SPRITE_MANIFEST = {};
