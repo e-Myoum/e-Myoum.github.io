@@ -194,7 +194,7 @@ export class Game {
     for (const surf of this.track.surfaces) {
       const d = Math.hypot(car.x - surf.x, car.y - surf.y);
       if (d < surf.r) {
-        if (surf.type === 'oil') { car.surfaceGrip = Math.min(car.surfaceGrip, TUNING.oilGripMul); car.onOil = true; }
+        if (surf.type === 'oil' || surf.type === 'water') { car.surfaceGrip = Math.min(car.surfaceGrip, TUNING.oilGripMul); car.onOil = true; }
         else if (surf.type === 'honey') {
           car.surfaceDrag = Math.max(car.surfaceDrag, TUNING.honeyDrag);
           car.surfaceSpeedCap = Math.min(car.surfaceSpeedCap, TUNING.maxSpeed * TUNING.honeySpeedCapFrac);
