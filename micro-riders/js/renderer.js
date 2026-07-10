@@ -35,6 +35,27 @@ function shadowEllipse(ctx, w, h) {
   ctx.restore();
 }
 
+// Ground shadows for collidable obstacles are sized directly off the
+// obstacle's own collider radius (not an arbitrary art constant) and kept
+// strictly inside it, so the shadow never visually implies a bigger solid
+// footprint than what the car actually collides against.
+function objectShadow(ctx, r) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(30,20,10,0.22)';
+  ctx.beginPath(); ctx.ellipse(0, r * 0.06, r * 0.92, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Same idea for capsule-shaped colliders (elongated props): halfSpan is the
+// capsule's full reach from center (segment half-length + end radius), so
+// the shadow's long axis matches the actual collidable length exactly.
+function capsuleShadow(ctx, halfSpan, r) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(30,20,10,0.22)';
+  ctx.beginPath(); ctx.ellipse(0, r * 0.15, halfSpan * 0.95, r * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 export class Renderer {
   constructor(game, ctx) {
     this.game = game;
@@ -252,7 +273,7 @@ export class Renderer {
   // (large) collider, since its job is to squarely block a shortcut rather
   // than add a weaving challenge.
   drawBigBlock(ctx) {
-    shadowEllipse(ctx, 190, 190);
+    objectShadow(ctx, 95);
     const s = 125;
     roundRectPath(ctx, -s / 2, -s / 2, s, s, 14);
     ctx.fillStyle = '#c9752b'; ctx.fill();
@@ -271,7 +292,7 @@ export class Renderer {
   // meant to represent. Every offset here stays small enough that the whole
   // silhouette sits inside the r=46 collider (see track.js#_buildObstacles).
   drawBlockTower(ctx) {
-    shadowEllipse(ctx, 100, 100);
+    objectShadow(ctx, 46);
     const colors = ['#2a9ee0', '#e6402c', '#f5c518'];
     const sizes = [58, 44, 28];
     const offs = [[-3, -2], [3, 3], [-2, 4]];
@@ -290,7 +311,7 @@ export class Renderer {
   // the collider circle's center) rather than a tall stack that only reads
   // right in a 3/4 perspective view.
   drawBookStack(ctx) {
-    shadowEllipse(ctx, 92, 92);
+    objectShadow(ctx, 44);
     const books = [
       { w: 62, h: 42, rot: -0.22, off: [-3, 4], color: '#2a9ee0' },
       { w: 58, h: 40, rot: 0.30, off: [4, -2], color: '#39c46b' },
@@ -312,7 +333,7 @@ export class Renderer {
     o.colliders.forEach((c, i) => {
       ctx.save(); this.worldT(ctx, cam, c.x, c.y);
       if (!this.drawSprite(ctx, 'obsMarble', c.r * 2)) {
-        shadowEllipse(ctx, c.r * 2.2, c.r * 1.4);
+        objectShadow(ctx, c.r);
         const grad = ctx.createRadialGradient(-c.r * 0.3, -c.r * 0.3, 1, 0, 0, c.r);
         grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.25, colors[i % colors.length]); grad.addColorStop(1, 'rgba(0,0,0,0.35)');
         ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.fill();
@@ -324,7 +345,7 @@ export class Renderer {
   drawPencil(ctx, o) {
     ctx.rotate(o.angle);
     const len = o.len, w = 18;
-    shadowEllipse(ctx, len * 1.1, 30);
+    capsuleShadow(ctx, len / 2 + 14, 13);
     roundRectPath(ctx, -len / 2, -w / 2, len * 0.8, w, 3);
     ctx.fillStyle = '#f5c518'; ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -340,7 +361,7 @@ export class Renderer {
   // small stacked discs (crimped-rim caps) instead of stacked cubes, same
   // top-down-centered principle so the art sits inside the r=44 collider.
   drawCapStack(ctx) {
-    shadowEllipse(ctx, 96, 96);
+    objectShadow(ctx, 26);
     const colors = ['#c0c4c8', '#e6402c', '#f5c518'];
     const sizes = [40, 30, 20];
     const offs = [[-2, -2], [3, 3], [-2, 4]];
@@ -360,7 +381,7 @@ export class Renderer {
     o.colliders.forEach(c => {
       ctx.save(); this.worldT(ctx, cam, c.x, c.y);
       if (!this.drawSprite(ctx, 'obsPeas', c.r * 2)) {
-        shadowEllipse(ctx, c.r * 2.2, c.r * 1.4);
+        objectShadow(ctx, c.r);
         const grad = ctx.createRadialGradient(-c.r * 0.3, -c.r * 0.3, 1, 0, 0, c.r);
         grad.addColorStop(0, '#a7e88a'); grad.addColorStop(0.35, '#4fa93a'); grad.addColorStop(1, 'rgba(0,0,0,0.35)');
         ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.fill();
@@ -372,7 +393,7 @@ export class Renderer {
   drawSpoon(ctx, o) {
     ctx.rotate(o.angle);
     const len = o.len, w = 16;
-    shadowEllipse(ctx, len * 1.1, 34);
+    capsuleShadow(ctx, 82, 17);
     roundRectPath(ctx, -len / 2, -w * 0.3, len * 0.72, w * 0.6, 4);
     ctx.fillStyle = '#caa27a'; ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -385,7 +406,7 @@ export class Renderer {
   // Kitchen sponge — a squishy rounded rectangle rather than anything
   // remotely fridge/oven-sized, per the miniature-car scale constraint.
   drawSponge(ctx) {
-    shadowEllipse(ctx, 96, 96);
+    objectShadow(ctx, 46);
     roundRectPath(ctx, -38, -26, 76, 52, 12);
     ctx.fillStyle = '#f5d76e'; ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.stroke();
@@ -398,7 +419,7 @@ export class Renderer {
   // Matchbox — kitchen's counterpart to the bedroom's toy-chest shortcut
   // blocker, same oversized-and-centered role (squarely blocks the hook cut).
   drawMatchbox(ctx) {
-    shadowEllipse(ctx, 190, 190);
+    capsuleShadow(ctx, 65, 39);
     const w = 130, h = 74;
     roundRectPath(ctx, -w / 2, -h / 2, w, h, 8);
     ctx.fillStyle = '#e6402c'; ctx.fill();

@@ -191,15 +191,28 @@ export class Game {
     } else car.offTrackTime = 0;
     if (car.offTrackTime > TUNING.offTrackLimit) this.explodeCar(car);
 
+    let onSlick = false;
     for (const surf of this.track.surfaces) {
       const d = Math.hypot(car.x - surf.x, car.y - surf.y);
       if (d < surf.r) {
-        if (surf.type === 'oil' || surf.type === 'water') { car.surfaceGrip = Math.min(car.surfaceGrip, TUNING.oilGripMul); car.onOil = true; }
+        if (surf.type === 'oil' || surf.type === 'water') { car.surfaceGrip = Math.min(car.surfaceGrip, TUNING.oilGripMul); car.onOil = true; onSlick = true; }
         else if (surf.type === 'honey') {
           car.surfaceDrag = Math.max(car.surfaceDrag, TUNING.honeyDrag);
           car.surfaceSpeedCap = Math.min(car.surfaceSpeedCap, TUNING.maxSpeed * TUNING.honeySpeedCapFrac);
         }
       }
+    }
+    // oil/water grip loss now outlasts the puddle itself ("wet tires"),
+    // easing back to full grip over slickLingerTime instead of snapping back
+    // the instant the car exits the small zone — without this, a fast car
+    // barely feels the puddle at all since it's only inside it for a beat
+    if (onSlick) {
+      car.slickLinger = TUNING.slickLingerTime;
+    } else if (car.slickLinger > 0) {
+      car.slickLinger = Math.max(0, car.slickLinger - dt);
+      const t = car.slickLinger / TUNING.slickLingerTime;
+      car.surfaceGrip = Math.min(car.surfaceGrip, 1 - t * (1 - TUNING.oilGripMul));
+      car.onOil = true;
     }
   }
 

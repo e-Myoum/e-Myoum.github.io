@@ -13,7 +13,7 @@ export function makeCar({ x, y, heading, carType, color, isPlayer, name }) {
     lap: 0, distAlong: 0, lastS: 0, finished: false, finishTime: 0,
     rank: 1, skidAmt: 0,
     offTrackTime: 0, exploding: false, explodeT: 0,
-    surfaceGrip: 1, surfaceDrag: 0, surfaceSpeedCap: Infinity, onOil: false,
+    surfaceGrip: 1, surfaceDrag: 0, surfaceSpeedCap: Infinity, onOil: false, slickLinger: 0,
   };
 }
 

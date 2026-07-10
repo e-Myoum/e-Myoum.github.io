@@ -69,6 +69,7 @@ export const TUNING = {
   offTrackGripMul: 0.5,  // grip multiplier off the drivable band — grass/floor-edge traction loss, not just a timer
   offTrackSpeedCapFrac: 0.55, // fraction of top speed a car is capped to off-track — makes cutting a corner reliably slower than staying on the tarmac
   oilGripMul: 0.16,      // grip multiplier while on a soap/oil slick — the car barely bites, mostly slides
+  slickLingerTime: 0.9,  // seconds the oil/water grip penalty eases back to normal over after leaving the puddle — otherwise a fast car is only ever inside the small zone for a beat, so the hazard barely registers
   honeyDrag: 220,        // extra deceleration (u/s^2) while on a honey patch — must stay below the weakest car's accel or a car that stops on it can never move again
   honeySpeedCapFrac: 0.35, // fraction of top speed a car is capped to while on honey — this (not the drag) is what makes it feel "stuck slow", so it never fights to a standstill
 };
