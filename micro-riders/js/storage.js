@@ -3,13 +3,18 @@
 // the two games don't share a leaderboard. Anyone can append a valid entry;
 // the DB rules forbid editing/deleting existing ones, so "top 5" is just
 // whatever the server returns, sorted client-side (lowest time first).
-// Scores are nested one level by circuit (/microriders_scores/<trackId>/...)
-// rather than a new sibling path per track — lap times aren't comparable
-// across circuits of very different length, and nesting stays inside the
-// already-allowed /microriders_scores subtree instead of needing new DB
-// rules added for each future track (see the microriders_scores rules fix).
+//
+// Per-circuit boards are done by tagging each entry with a `track` field and
+// filtering client-side, keeping every write at the same flat
+// /microriders_scores path as before — NOT nested per track
+// (/microriders_scores/<trackId>/...). An earlier version nested by track,
+// which silently broke the leaderboard: the existing DB rules validate score
+// entries one level below /microriders_scores, so a nested write landed a
+// level too deep and got rejected there (or read back as {} client-side).
+// Entries from before the kitchen circuit existed have no `track` field —
+// treated as 'bedroom' so those old scores keep showing up.
 const DB_URL = 'https://wasteland-riders-default-rtdb.europe-west1.firebasedatabase.app';
-const pathFor = (trackId) => '/microriders_scores/' + trackId + '.json';
+const PATH = '/microriders_scores.json';
 const KEY_TOP5_CACHE = 'mr_top5_cache_';
 const KEY_PREFS = 'mr_prefs';
 
@@ -26,13 +31,14 @@ function cacheTop5(trackId, top5) {
 
 export async function fetchTop5(trackId) {
   try {
-    const res = await fetch(DB_URL + pathFor(trackId));
+    const res = await fetch(DB_URL + PATH);
     const body = await res.text();
     if (!res.ok) { console.error('[leaderboard] fetch failed', res.status, body); return loadCachedTop5(trackId); }
     const obj = body ? JSON.parse(body) : null;
     const list = obj ? Object.values(obj) : [];
-    list.sort((a, b) => a.time - b.time);
-    const top5 = list.slice(0, 5);
+    const filtered = list.filter(e => (e.track || 'bedroom') === trackId);
+    filtered.sort((a, b) => a.time - b.time);
+    const top5 = filtered.slice(0, 5);
     cacheTop5(trackId, top5);
     return top5;
   } catch (e) {
@@ -43,10 +49,10 @@ export async function fetchTop5(trackId) {
 
 export async function submitScore(trackId, name, time) {
   try {
-    const res = await fetch(DB_URL + pathFor(trackId), {
+    const res = await fetch(DB_URL + PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, time, ts: Date.now() }),
+      body: JSON.stringify({ name, time, ts: Date.now(), track: trackId }),
     });
     const body = await res.text();
     if (!res.ok) console.error('[leaderboard] submit rejected', res.status, body);
